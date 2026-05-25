@@ -19,7 +19,7 @@ canvas { display: block; image-rendering: pixelated; image-rendering: crisp-edge
 #touch-bar {
   display: none;
   width: 100%;
-  height: 80px;
+  height: 64px;
   background: #06060e;
   border-top: 1px solid #222;
   justify-content: space-around;
@@ -29,7 +29,7 @@ canvas { display: block; image-rendering: pixelated; image-rendering: crisp-edge
 }
 .tb {
   flex: 1;
-  height: 58px;
+  height: 46px;
   background: #111128;
   border: 1px solid #333;
   color: #bbb;
@@ -61,29 +61,33 @@ canvas { display: block; image-rendering: pixelated; image-rendering: crisp-edge
   <button class="tb" id="tb-rot">▲</button>
   <button class="tb" id="tb-drop">▼</button>
   <button class="tb" id="tb-right">►</button>
-  <button class="tb" id="tb-pause">⏸</button>
-  <button class="tb" id="tb-home" style="max-width:48px;font-size:15px;">⌂</button>
+  <button class="tb" id="tb-pause">▶</button>
+  <button class="tb" id="tb-music" style="max-width:44px;font-size:16px;">♪</button>
+  <button class="tb" id="tb-home" style="max-width:44px;font-size:13px;">⌂</button>
 </div>
 <script>
 'use strict';
 
 // ─── Layout ──────────────────────────────────────────────────────────────────
 const COLS = 10, ROWS = 20;
-const PAD = 14, GAP = 14, PANEL_W = 148, STRIP_H = 54;
-let BLOCK, BOARD_W, BOARD_H, CW, CH, narrowMode = false;
+const PAD = 14, GAP = 14, PANEL_W = 148;
+let BLOCK, BOARD_W, BOARD_H, CW, CH, narrowMode = false, xOff = 0;
 
 function computeLayout() {
   const vw = window.innerWidth, vh = window.innerHeight;
   narrowMode = vw < 560;
   if (narrowMode) {
-    const avH = vh - 80 - STRIP_H - PAD * 2; // 80px for touch bar
+    const avH = vh - 64 - PAD * 2;
     BLOCK = Math.max(14, Math.min(Math.floor((vw - PAD * 2) / COLS), Math.floor(avH / ROWS)));
+    BOARD_W = COLS * BLOCK; BOARD_H = ROWS * BLOCK;
+    CW = vw;
   } else {
     BLOCK = Math.max(18, Math.min(28, Math.floor((vw - PAD * 2 - GAP - PANEL_W) / COLS)));
+    BOARD_W = COLS * BLOCK; BOARD_H = ROWS * BLOCK;
+    CW = PAD + BOARD_W + GAP + PANEL_W + PAD;
   }
-  BOARD_W = COLS * BLOCK; BOARD_H = ROWS * BLOCK;
-  CW = narrowMode ? PAD * 2 + BOARD_W : PAD + BOARD_W + GAP + PANEL_W + PAD;
-  CH = PAD + BOARD_H + PAD + (narrowMode ? STRIP_H : 0);
+  CH = PAD + BOARD_H + PAD;
+  xOff = narrowMode ? Math.floor((CW - PAD * 2 - BOARD_W) / 2) : 0;
   const canvas = document.getElementById('game');
   if (canvas) { canvas.width = CW; canvas.height = CH; }
 }
@@ -439,6 +443,7 @@ function triggerGameOver() {
   stopMusic();
   cancelAnimationFrame(raf);
   sfxGameOver();
+  updateCenterBtn();
   render();
   drawGameOver();
 }
@@ -452,6 +457,7 @@ function init(lvl) {
   prevLevel = level;
   dropInterval = GRAVITY[Math.min(level, GRAVITY.length - 1)];
   gameOver = false; paused = false; started = true; softDrop = false;
+  updateCenterBtn();
   piece = nextFromBag();
   nextPiece = nextFromBag();
   lastDrop = performance.now();
@@ -511,13 +517,13 @@ function drawMiniBlock(bx, by, nb, color) {
 function render() {
   const accent = LEVEL_PALETTE[level % LEVEL_PALETTE.length];
 
-  // Background
   ctx.fillStyle = '#0a0a12'; ctx.fillRect(0, 0, CW, CH);
 
-  // Board bg
+  ctx.save();
+  ctx.translate(xOff, 0);
+
   ctx.fillStyle = '#07070f'; ctx.fillRect(PAD, PAD, BOARD_W, BOARD_H);
 
-  // Grid
   ctx.strokeStyle = accent; ctx.lineWidth = 0.4; ctx.globalAlpha = 0.32;
   for (let c = 1; c < COLS; c++) {
     ctx.beginPath(); ctx.moveTo(PAD + c*BLOCK, PAD); ctx.lineTo(PAD + c*BLOCK, PAD+BOARD_H); ctx.stroke();
@@ -527,25 +533,22 @@ function render() {
   }
   ctx.globalAlpha = 1;
 
-  // Board border
   ctx.strokeStyle = '#888'; ctx.lineWidth = 2;
   ctx.strokeRect(PAD-2, PAD-2, BOARD_W+4, BOARD_H+4);
   ctx.strokeStyle = '#444'; ctx.lineWidth = 1;
   ctx.strokeRect(PAD-4, PAD-4, BOARD_W+8, BOARD_H+8);
 
-  // Locked blocks
   for (let r = 0; r < ROWS; r++)
     for (let c = 0; c < COLS; c++)
       if (board[r][c]) drawBlock(c, r, board[r][c]);
 
-  // Active piece
   if (piece && !gameOver)
     for (let r = 0; r < piece.shape.length; r++)
       for (let c = 0; c < piece.shape[r].length; c++)
         if (piece.shape[r][c] && piece.y + r >= 0)
           drawBlock(piece.x + c, piece.y + r, piece.color);
 
-  if (narrowMode) drawStatsStrip(accent); else drawPanel(accent);
+  if (!narrowMode) drawPanel(accent);
 
   if (paused) {
     ctx.fillStyle = 'rgba(0,0,0,0.72)'; ctx.fillRect(PAD, PAD, BOARD_W, BOARD_H);
@@ -555,49 +558,55 @@ function render() {
     ctx.fillStyle = '#888'; ctx.font = '10px "Courier New",monospace';
     ctx.fillText('Press P to continue', PAD + BOARD_W/2, PAD + BOARD_H/2 + 22);
   }
+
+  ctx.restore();
+
+  if (narrowMode) drawNarrowStats(accent);
 }
 
-function drawStatsStrip(accent) {
-  const sy = PAD + BOARD_H + PAD;
-  ctx.fillStyle = '#07070f'; ctx.fillRect(0, sy - PAD, CW, STRIP_H + PAD);
-  ctx.strokeStyle = '#444'; ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.moveTo(0, sy - 1); ctx.lineTo(CW, sy - 1); ctx.stroke();
+function drawNarrowStats(accent) {
+  const boardLeft = xOff + PAD;
+  const boardRight = boardLeft + BOARD_W;
+  const lx = Math.floor(boardLeft / 2);
+  const rx = Math.floor((boardRight + CW) / 2);
+  ctx.textAlign = 'center';
 
-  // three stat columns
-  const slots = [
-    ['SCORE', String(score).padStart(7,'0'), '#F0F000'],
-    ['LEVEL', String(level).padStart(2,'0'),  '#00F0F0'],
-    ['LINES', String(lines).padStart(4,'0'),  '#00F000'],
-  ];
-  const slotW = Math.floor(CW * 0.55 / 3);
-  slots.forEach(([label, value, color], i) => {
-    const sx = PAD + slotW * i + slotW / 2;
-    ctx.textAlign = 'center';
-    ctx.fillStyle = '#666'; ctx.font = 'bold 8px "Courier New",monospace';
-    ctx.fillText(label, sx, sy + 12);
-    ctx.fillStyle = color; ctx.font = `bold ${Math.max(11, BLOCK - 12)}px "Courier New",monospace`;
-    ctx.fillText(value, sx, sy + 30);
-  });
+  ctx.fillStyle = '#555'; ctx.font = 'bold 7px "Courier New",monospace';
+  ctx.fillText('SCORE', lx, PAD + 20);
+  ctx.fillStyle = '#F0F000'; ctx.font = 'bold 11px "Courier New",monospace';
+  ctx.fillText(String(score).padStart(7, '0'), lx, PAD + 34);
 
-  // next piece (right side)
-  const nb = Math.max(12, Math.floor(BLOCK * 0.65));
-  const nx = PAD + Math.floor(CW * 0.6), ny = sy + 4, nw = CW - nx - PAD, nh = STRIP_H - 8;
-  ctx.fillStyle = '#050510'; ctx.fillRect(nx, ny, nw, nh);
-  ctx.strokeStyle = '#333'; ctx.lineWidth = 1; ctx.strokeRect(nx, ny, nw, nh);
-  ctx.fillStyle = '#555'; ctx.font = '7px "Courier New",monospace'; ctx.textAlign = 'center';
-  ctx.fillText('NEXT', nx + nw / 2, ny + 9);
+  ctx.fillStyle = '#555'; ctx.font = 'bold 7px "Courier New",monospace';
+  ctx.fillText('LEVEL', lx, PAD + 62);
+  ctx.fillStyle = '#00F0F0'; ctx.font = 'bold 20px "Courier New",monospace';
+  ctx.fillText(String(level).padStart(2, '0'), lx, PAD + 82);
+
+  ctx.fillStyle = '#555'; ctx.font = 'bold 7px "Courier New",monospace';
+  ctx.fillText('LINES', rx, PAD + 20);
+  ctx.fillStyle = '#00F000'; ctx.font = 'bold 12px "Courier New",monospace';
+  ctx.fillText(String(lines).padStart(4, '0'), rx, PAD + 34);
+
+  ctx.fillStyle = '#555'; ctx.font = 'bold 7px "Courier New",monospace';
+  ctx.fillText('NEXT', rx, PAD + 62);
   if (nextPiece) {
+    const nb = Math.min(12, Math.floor((CW - boardRight - 4) / 4));
     const shape = nextPiece.shape;
     const rows = shape.length, cols = shape[0].length;
-    let minR=rows,maxR=-1,minC=cols,maxC=-1;
-    for (let r=0;r<rows;r++) for (let c=0;c<cols;c++) if(shape[r][c]) {
-      if(r<minR)minR=r; if(r>maxR)maxR=r; if(c<minC)minC=c; if(c>maxC)maxC=c;
+    let minR = rows, maxR = -1, minC = cols, maxC = -1;
+    for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) if (shape[r][c]) {
+      if (r < minR) minR = r; if (r > maxR) maxR = r;
+      if (c < minC) minC = c; if (c > maxC) maxC = c;
     }
-    const usedR=maxR-minR+1, usedC=maxC-minC+1;
-    const ox=nx+(nw-usedC*nb)/2-minC*nb, oy=ny+(nh-usedR*nb)/2-minR*nb+2;
-    for (let r=0;r<rows;r++) for (let c=0;c<cols;c++)
-      if(shape[r][c]) drawMiniBlock(ox+c*nb,oy+r*nb,nb,nextPiece.color);
+    const usedC = maxC - minC + 1;
+    const ox = rx - (usedC * nb) / 2 - minC * nb;
+    const oy = PAD + 68 - minR * nb;
+    for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++)
+      if (shape[r][c]) drawMiniBlock(ox + c * nb, oy + r * nb, nb, nextPiece.color);
   }
+
+  ctx.fillStyle = musicEnabled ? '#00F000' : '#444';
+  ctx.font = '8px "Courier New",monospace';
+  ctx.fillText(musicEnabled ? '♪ ON' : '♪ OFF', lx, PAD + BOARD_H - 10);
 }
 
 function labelAndValue(cx, y, label, value, col) {
@@ -670,6 +679,8 @@ function drawPanel(accent) {
 }
 
 function drawGameOver() {
+  ctx.save();
+  ctx.translate(xOff, 0);
   ctx.fillStyle = 'rgba(0,0,0,0.78)'; ctx.fillRect(PAD, PAD, BOARD_W, BOARD_H);
   ctx.textAlign = 'center';
   const mx = PAD + BOARD_W / 2;
@@ -679,10 +690,15 @@ function drawGameOver() {
   ctx.fillText('Score: ' + String(score).padStart(7,'0'), mx, PAD + BOARD_H/2 + 10);
   ctx.fillStyle = '#aaa'; ctx.font = '10px "Courier New",monospace';
   ctx.fillText('Press R to play again', mx, PAD + BOARD_H/2 + 32);
+  ctx.restore();
 }
 
 function drawStartScreen() {
   ctx.fillStyle = '#0a0a12'; ctx.fillRect(0, 0, CW, CH);
+
+  ctx.save();
+  ctx.translate(xOff, 0);
+
   ctx.strokeStyle = '#888'; ctx.lineWidth = 2;
   ctx.strokeRect(PAD-2, PAD-2, BOARD_W+4, BOARD_H+4);
 
@@ -717,16 +733,19 @@ function drawStartScreen() {
   ctx.fillStyle = '#333'; ctx.font = '8px "Courier New",monospace';
   ctx.fillText('Original by Alexey Pajitnov, 1984', mx, PAD + BOARD_H - 20);
 
-  // Panel stub
-  const px = PAD + BOARD_W + GAP;
-  ctx.fillStyle = '#09090f'; ctx.fillRect(px, PAD, PANEL_W, BOARD_H);
-  ctx.strokeStyle = '#888'; ctx.lineWidth = 2;
-  ctx.strokeRect(px-2, PAD-2, PANEL_W+4, BOARD_H+4);
-  ctx.fillStyle = '#F0F000'; ctx.font = 'bold 20px "Courier New",monospace';
-  ctx.textAlign = 'center';
-  ctx.fillText('TETRIS', px + PANEL_W/2, PAD + 36);
-  ctx.fillStyle = '#555'; ctx.font = '9px "Courier New",monospace';
-  ctx.fillText('ESC  menu', px + PANEL_W/2, PAD + BOARD_H - 16);
+  if (!narrowMode) {
+    const px = PAD + BOARD_W + GAP;
+    ctx.fillStyle = '#09090f'; ctx.fillRect(px, PAD, PANEL_W, BOARD_H);
+    ctx.strokeStyle = '#888'; ctx.lineWidth = 2;
+    ctx.strokeRect(px-2, PAD-2, PANEL_W+4, BOARD_H+4);
+    ctx.fillStyle = '#F0F000'; ctx.font = 'bold 20px "Courier New",monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('TETRIS', px + PANEL_W/2, PAD + 36);
+    ctx.fillStyle = '#555'; ctx.font = '9px "Courier New",monospace';
+    ctx.fillText('ESC  menu', px + PANEL_W/2, PAD + BOARD_H - 16);
+  }
+
+  ctx.restore();
 }
 
 // ─── Input ────────────────────────────────────────────────────────────────────
@@ -790,6 +809,12 @@ document.addEventListener('keyup', e => {
 });
 
 // ─── Touch controls ───────────────────────────────────────────────────────────
+function updateCenterBtn() {
+  const btn = document.getElementById('tb-pause');
+  if (!btn) return;
+  btn.textContent = (!started || gameOver || paused) ? '▶' : '⏸';
+}
+
 function setupTouch() {
   const bar = document.getElementById('touch-bar');
   if (narrowMode || 'ontouchstart' in window) {
@@ -806,7 +831,15 @@ function setupTouch() {
   hold(document.getElementById('tb-right'), () => { if (started && !gameOver && !paused && piece && fits(piece.shape, piece.x+1, piece.y)) { piece.x++; sfxMove(); render(); } });
   hold(document.getElementById('tb-rot'),   () => { if (started && !gameOver && !paused && piece) { const rot=rotateCW(piece.shape); if(fits(rot,piece.x,piece.y)){piece.shape=rot;sfxRotate();render();} } });
   hold(document.getElementById('tb-drop'),  () => { softDrop = true; },  () => { softDrop = false; });
-  hold(document.getElementById('tb-pause'), () => { if (started && !gameOver) { paused=!paused; setPaused(paused); if(!paused)lastDrop=performance.now(); render(); } });
+  hold(document.getElementById('tb-pause'), () => {
+    if (!started || gameOver) { init(startLevel); return; }
+    paused = !paused; setPaused(paused); if (!paused) lastDrop = performance.now();
+    updateCenterBtn(); render();
+  });
+  hold(document.getElementById('tb-music'), () => {
+    initAudio(); musicEnabled = !musicEnabled; setMusicEnabled(musicEnabled);
+    if (started && !gameOver) render(); else drawStartScreen();
+  });
   hold(document.getElementById('tb-home'),  () => { window.location.href = 'index.html'; });
 }
 
