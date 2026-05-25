@@ -63,6 +63,7 @@ canvas { display: block; image-rendering: pixelated; image-rendering: crisp-edge
   <button class="tb" id="tb-launch">▶</button>
   <button class="tb" id="tb-right">►</button>
   <button class="tb" id="tb-music">♪</button>
+  <button class="tb" id="tb-home" style="max-width:48px;font-size:15px;">⌂</button>
 </div>
 <script>
 'use strict';
@@ -157,6 +158,7 @@ const LOOP_DUR = MELODY.reduce((s,[,d])=>s+d,0) * Q;
 function initAudio() {
   if (audioCtx) { audioCtx.resume(); return; }
   audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  audioCtx.resume();
   masterGain = audioCtx.createGain(); masterGain.gain.value = 1;
   musicGain  = audioCtx.createGain(); musicGain.gain.value  = musicEnabled ? 1 : 0;
   musicGain.connect(masterGain);
@@ -316,6 +318,7 @@ canvas.addEventListener('touchmove', e => {
   const r = canvas.getBoundingClientRect();
   mouseX = (e.touches[0].clientX - r.left) * (CW / r.width);
 }, { passive: false });
+canvas.addEventListener('touchend', () => { mouseX = null; });
 canvas.addEventListener('click', () => {
   initAudio();
   if (state === 'start')    { startGame(startLevel); return; }
@@ -336,9 +339,9 @@ let tbLeft = false, tbRight = false;
   const actBtn = document.getElementById('tb-launch');
   const musBtn = document.getElementById('tb-music');
 
-  lBtn.addEventListener('touchstart',  e => { e.preventDefault(); tbLeft  = true;  initAudio(); }, { passive: false });
+  lBtn.addEventListener('touchstart',  e => { e.preventDefault(); tbLeft  = true;  mouseX = null; initAudio(); }, { passive: false });
   lBtn.addEventListener('touchend',    e => { e.preventDefault(); tbLeft  = false; }, { passive: false });
-  rBtn.addEventListener('touchstart',  e => { e.preventDefault(); tbRight = true;  initAudio(); }, { passive: false });
+  rBtn.addEventListener('touchstart',  e => { e.preventDefault(); tbRight = true;  mouseX = null; initAudio(); }, { passive: false });
   rBtn.addEventListener('touchend',    e => { e.preventDefault(); tbRight = false; }, { passive: false });
   actBtn.addEventListener('touchstart', e => {
     e.preventDefault(); initAudio();
@@ -349,6 +352,7 @@ let tbLeft = false, tbRight = false;
     if (state === 'gameover') { startGame(startLevel); return; }
   }, { passive: false });
   musBtn.addEventListener('touchstart', e => { e.preventDefault(); initAudio(); toggleMusic(); }, { passive: false });
+  document.getElementById('tb-home').addEventListener('touchstart', e => { e.preventDefault(); stopMusic(); window.location.href = 'index.html'; }, { passive: false });
 })();
 
 // ─── Launch ───────────────────────────────────────────────────────────────────
@@ -393,7 +397,7 @@ function update(dt) {
   const spd = PAD_SPD * dt;
   if (held['ArrowLeft']  || tbLeft)  paddle.x -= spd;
   if (held['ArrowRight'] || tbRight) paddle.x += spd;
-  if (mouseX !== null) paddle.x = mouseX - PADDLE_W / 2;
+  if (mouseX !== null && !tbLeft && !tbRight) paddle.x = mouseX - PADDLE_W / 2;
   paddle.x = Math.max(0, Math.min(CW - PADDLE_W, paddle.x));
 
   if (ball.stuck) {

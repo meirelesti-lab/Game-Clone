@@ -61,6 +61,7 @@ canvas { display: block; image-rendering: pixelated; image-rendering: crisp-edge
   <button class="tb" id="tb-drop">▼</button>
   <button class="tb" id="tb-right">►</button>
   <button class="tb" id="tb-pause">⏸</button>
+  <button class="tb" id="tb-home" style="max-width:48px;font-size:15px;">⌂</button>
 </div>
 <script>
 'use strict';
@@ -137,6 +138,7 @@ const MELODY_DUR = MELODY.reduce((s, [,d]) => s + d, 0) * Q;
 function initAudio() {
   if (audioCtx) { audioCtx.resume(); return; }
   audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  audioCtx.resume();
   masterGain = audioCtx.createGain(); masterGain.gain.value = 1.0; masterGain.connect(audioCtx.destination);
   musicGain  = audioCtx.createGain(); musicGain.gain.value  = 0.18; musicGain.connect(masterGain);
   sfxGain    = audioCtx.createGain(); sfxGain.gain.value    = 0.30; sfxGain.connect(masterGain);
@@ -831,6 +833,7 @@ function setupTouch() {
   hold(document.getElementById('tb-rot'),   () => { if (started&&!gameOver&&!gameWon&&!paused) { rotatePill(); render(); } });
   hold(document.getElementById('tb-drop'),  () => { softDrop = true; }, () => { softDrop = false; });
   hold(document.getElementById('tb-pause'), () => { if (started&&!gameOver&&!gameWon){paused=!paused;setPaused(paused);if(!paused)lastDrop=performance.now();render();} });
+  hold(document.getElementById('tb-home'),  () => { window.location.href = 'index.html'; });
 }
 
 window.addEventListener('resize', () => {
