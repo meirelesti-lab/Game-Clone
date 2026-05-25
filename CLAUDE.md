@@ -8,17 +8,43 @@ Classic Tetris clone built as a browser game. Clean, playable, no dependencies.
 ## Goal
 Fully functional Tetris in the browser — keyboard controls, scoring, levels, game over screen.
 
+## Mobile Control Design Principles
+For any new game added to this arcade, follow this layout for the touch bar:
+
+```
+[ rot/action ] [ ◄ ] [ ↓ ] [ ► ] [ rot/action ]
+                    [⏸] [♪] [⌂]
+```
+
+- **Think about how the user holds the phone** — left thumb stays left, right thumb stays right
+- **Action buttons (rotate, fire, etc.) go on the outer edges** so each thumb has one without crossing over
+- **Movement (◄ ↓ ►) fills the middle** — reachable by either thumb
+- **System buttons (⏸ ♪ ⌂) go in a small strip below** — out of the way during play
+- Bar height: **104px** (main row 62px + system strip 22px + padding/gap)
+- Movement buttons: `flex: 1` so they share remaining space evenly
+- Action buttons: **62×62px circles** (`border-radius: 50%`), `flex-shrink: 0`
+- If a game has two action directions (e.g. CCW/CW rotate): left outer = CCW (blue), right outer = CW (red)
+- If a game has one action (e.g. single rotate): duplicate it on both sides — player picks preferred thumb
+
 ## Tech
 - Single file: `tetris.html` — plain HTML + CSS + JavaScript
 - No frameworks, no build step — just open in browser
 - Audio via Web Audio API (no external files)
 
 ## Current State
-**v1.5 — viewport meta tag added to all pages; mobile fully functional.** Files: `index.html` (launcher), `tetris.html`, `doctor-mario.html`, `breakout.html`
+**v1.7 — Retina rendering + mobile controls overhaul.** All pushed to GitHub Pages.
 
-**Hosted:** https://meirelesti-lab.github.io/Game-Clone/ (GitHub Pages, private repo)
+**Hosted:** https://meirelesti-lab.github.io/Game-Clone/ (GitHub Pages — live and working)
 
-**Key fix (v1.5):** All four HTML files now have `<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">`. Without it, mobile browsers rendered at ~980px desktop width, making everything tiny and unclickable.
+**PWA setup (v1.6, still current):**
+- `manifest.json`: standalone display, yellow theme (#F0F000), arcade icons, `start_url: "."`
+- `sw.js`: cache-first service worker, pre-caches all 4 HTML pages + icons on install. Bump `arcade-v1` → `arcade-v2` to force cache refresh after future deploys.
+- Install on iOS: Safari → Share → Add to Home Screen. Install on Android: Chrome → ⋮ → Install app.
+
+**v1.7 changes:**
+- **Retina/DPR fix (all 3 games):** canvas now scales by `devicePixelRatio` — renders at full 3× resolution on iPhone 15 Pro Max. `ctx.setTransform(dpr,0,0,dpr,0,0)` at top of every render call.
+- **Stats top bar (Tetris + Dr. Mario):** 52px bar above the board showing SCORE / LEVEL / LINES(T) or VIRUS(DM) / NEXT — no more clipped side-margin stats.
+- **Symmetric touch controls (Tetris + Dr. Mario):** `[rot] [◄] [↓] [►] [rot]` main row + `[⏸][♪][⌂]` system strip. 104px bar. See "Mobile Control Design Principles" section for spec.
 
 ### Tetris (`tetris.html`)
 - 10×20 board, all 7 tetrominoes, NRS rotation (no wall kicks)
