@@ -59,6 +59,7 @@ body {
 }
 #card-tetris::before { background: #F0F000; }
 #card-drm::before    { background: #FF5533; }
+#card-brk::before    { background: #FF3333; }
 
 #card-tetris.active, #card-tetris:hover {
   border-color: #F0F000;
@@ -70,6 +71,11 @@ body {
   box-shadow: 0 0 22px rgba(255,85,51,0.22), 0 6px 20px rgba(0,0,0,0.5);
   transform: translateY(-3px);
 }
+#card-brk.active, #card-brk:hover {
+  border-color: #FF3333;
+  box-shadow: 0 0 22px rgba(255,51,51,0.22), 0 6px 20px rgba(0,0,0,0.5);
+  transform: translateY(-3px);
+}
 
 .card-top  { padding: 22px 22px 16px; border-bottom: 1px solid #1e1e38; }
 .card-body { padding: 16px 22px 22px; }
@@ -79,6 +85,7 @@ body {
 .card-title { font-size: 24px; font-weight: bold; letter-spacing: 2px; margin-bottom: 8px; }
 #card-tetris .card-title { color: #F0F000; }
 #card-drm    .card-title { color: #FF5533; }
+#card-brk    .card-title { color: #FF3333; }
 
 .card-year { font-size: 9px; color: #666; letter-spacing: 2px; }
 
@@ -119,10 +126,12 @@ body {
 }
 #card-tetris .lvl-val { color: #F0F000; }
 #card-drm    .lvl-val { color: #FF5533; }
+#card-brk    .lvl-val { color: #FF3333; }
 
 .card-cta { font-size: 10px; letter-spacing: 2px; font-weight: bold; color: #888; }
 #card-tetris.active .card-cta { color: #F0F000; }
 #card-drm.active    .card-cta { color: #FF5533; }
+#card-brk.active    .card-cta { color: #FF3333; }
 
 .footer { margin-top: 48px; font-size: 9px; color: #666; letter-spacing: 2px; text-align: center; line-height: 2; }
 </style>
@@ -192,18 +201,46 @@ body {
     </div>
   </a>
 
+
+  <a class="card" id="card-brk" href="breakout.html">
+    <div class="card-top">
+      <div class="card-num">[ 3 ]</div>
+      <div class="card-title">BREAKOUT</div>
+      <div class="card-year">ATARI · ARCADE · 1976</div>
+    </div>
+    <div class="card-body">
+      <div class="card-desc">
+        Smash bricks with a bouncing ball.<br>
+        Keep your paddle moving — the ball<br>
+        speeds up as you score.
+      </div>
+      <div class="card-tags">
+        <span class="tag">ACTION</span>
+        <span class="tag">ATARI</span>
+        <span class="tag">SPEED-UP</span>
+      </div>
+      <div class="level-row">
+        <span class="level-label">LEVEL</span>
+        <button class="lvl-btn" id="brk-dec">◄</button>
+        <span class="lvl-val" id="brk-lvl">0</span>
+        <button class="lvl-btn" id="brk-inc">►</button>
+      </div>
+      <div class="card-cta" id="brk-cta">▶ PRESS 3</div>
+    </div>
+  </a>
+
 </div>
 
 <footer class="footer">
-  ← →  switch game &nbsp;·&nbsp; ↑ ↓  change level &nbsp;·&nbsp; ENTER / 1 / 2  play
+  ← →  switch game &nbsp;·&nbsp; ↑ ↓  change level &nbsp;·&nbsp; ENTER / 1 / 2 / 3  play
 </footer>
 
 <script>
-const MAXLVL = { tetris: 9, drm: 19 };
-const levels = { tetris: 0, drm: 0 };
-const cards  = [document.getElementById('card-tetris'), document.getElementById('card-drm')];
-const keys   = ['tetris', 'drm'];
-const urls   = ['tetris.html', 'doctor-mario.html'];
+const MAXLVL = { tetris: 9, drm: 19, brk: 9 };
+const levels = { tetris: 0, drm: 0, brk: 0 };
+const cards  = [document.getElementById('card-tetris'), document.getElementById('card-drm'), document.getElementById('card-brk')];
+const keys   = ['tetris', 'drm', 'brk'];
+const urls   = ['tetris.html', 'doctor-mario.html', 'breakout.html'];
 let sel = 0;
 
 function updateDisplay(game) {
@@ -230,6 +267,8 @@ document.getElementById('tetris-dec').addEventListener('click', e => { e.prevent
 document.getElementById('tetris-inc').addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); changeLevel('tetris',  1); });
 document.getElementById('drm-dec').addEventListener('click',    e => { e.preventDefault(); e.stopPropagation(); changeLevel('drm',    -1); });
 document.getElementById('drm-inc').addEventListener('click',    e => { e.preventDefault(); e.stopPropagation(); changeLevel('drm',     1); });
+document.getElementById('brk-dec').addEventListener('click',    e => { e.preventDefault(); e.stopPropagation(); changeLevel('brk',    -1); });
+document.getElementById('brk-inc').addEventListener('click',    e => { e.preventDefault(); e.stopPropagation(); changeLevel('brk',     1); });
 
 // Card clicks navigate with level
 cards.forEach((card, i) => {
@@ -246,11 +285,13 @@ document.addEventListener('keydown', e => {
     case 'Enter': case ' ': launch(sel); break;
     case '1': launch(0); break;
     case '2': launch(1); break;
+    case '3': launch(2); break;
   }
 });
 
 updateDisplay('tetris');
 updateDisplay('drm');
+updateDisplay('brk');
 </script>
 </body>
 </html>
