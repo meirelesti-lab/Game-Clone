@@ -298,7 +298,7 @@ function update(dt) {
   if (state !== 'playing') return;
 
   // Paddle movement
-  const spd = PAD_SPD * dt * 60;
+  const spd = PAD_SPD * dt;
   if (held['ArrowLeft']  || tbLeft)  paddle.x -= spd;
   if (held['ArrowRight'] || tbRight) paddle.x += spd;
   if (mouseX !== null) paddle.x = mouseX - PADDLE_W / 2;
@@ -310,8 +310,8 @@ function update(dt) {
     return;
   }
 
-  ball.x += ball.vx * dt * 60;
-  ball.y += ball.vy * dt * 60;
+  ball.x += ball.vx * dt;
+  ball.y += ball.vy * dt;
 
   // Walls
   if (ball.x - BALL_R < 0)  { ball.x = BALL_R;       ball.vx =  Math.abs(ball.vx); sfxWall(); }
@@ -404,6 +404,12 @@ function drawPlaying() {
   ctx.fillStyle = '#000';
   ctx.fillRect(0, 0, CW, CH);
   drawScoreBar();
+
+  // Field border — left, right, top (score bar line), bottom open
+  ctx.strokeStyle = '#2a2a4a';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(0.5, SCORE_BAR + 0.5, CW - 1, CH - SCORE_BAR - 1);
+
   drawBricks();
 
   // Paddle
