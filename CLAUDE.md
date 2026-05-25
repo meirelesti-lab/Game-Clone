@@ -14,9 +14,11 @@ Fully functional Tetris in the browser — keyboard controls, scoring, levels, g
 - Audio via Web Audio API (no external files)
 
 ## Current State
-**v1.4 — full mobile layout overhaul for Tetris & Dr. Mario.** Files: `index.html` (launcher), `tetris.html`, `doctor-mario.html`, `breakout.html`
+**v1.5 — viewport meta tag added to all pages; mobile fully functional.** Files: `index.html` (launcher), `tetris.html`, `doctor-mario.html`, `breakout.html`
 
 **Hosted:** https://meirelesti-lab.github.io/Game-Clone/ (GitHub Pages, private repo)
+
+**Key fix (v1.5):** All four HTML files now have `<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">`. Without it, mobile browsers rendered at ~980px desktop width, making everything tiny and unclickable.
 
 ### Tetris (`tetris.html`)
 - 10×20 board, all 7 tetrominoes, NRS rotation (no wall kicks)
