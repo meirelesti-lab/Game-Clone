@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>ARCADE</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  background: #0a0a18;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Courier New', Courier, monospace;
+  color: #fff;
+  background-image:
+    repeating-linear-gradient(to bottom,
+      transparent 0px, transparent 2px,
+      rgba(0,0,0,0.10) 2px, rgba(0,0,0,0.10) 4px),
+    radial-gradient(ellipse at 50% 0%, rgba(80,40,180,0.18) 0%, transparent 70%);
+  user-select: none;
+}
+
+.header { text-align: center; margin-bottom: 48px; }
+
+.title {
+  font-size: 52px;
+  font-weight: bold;
+  letter-spacing: 16px;
+  color: #F0F000;
+  text-shadow: 0 0 30px rgba(240,240,0,0.55), 0 0 8px rgba(240,240,0,0.30);
+}
+
+.subtitle { font-size: 10px; color: #888; margin-top: 10px; letter-spacing: 6px; }
+
+.games { display: flex; gap: 32px; flex-wrap: wrap; justify-content: center; }
+
+.card {
+  width: 240px;
+  border: 2px solid #333;
+  background: #0e0e22;
+  cursor: pointer;
+  text-decoration: none;
+  color: inherit;
+  display: block;
+  outline: none;
+  transition: border-color 0.08s, box-shadow 0.08s, transform 0.08s;
+  position: relative;
+  overflow: visible;
+}
+
+.card::before {
+  content: '';
+  display: block;
+  height: 4px;
+  width: 100%;
+}
+#card-tetris::before { background: #F0F000; }
+#card-drm::before    { background: #FF5533; }
+
+#card-tetris.active, #card-tetris:hover {
+  border-color: #F0F000;
+  box-shadow: 0 0 22px rgba(240,240,0,0.22), 0 6px 20px rgba(0,0,0,0.5);
+  transform: translateY(-3px);
+}
+#card-drm.active, #card-drm:hover {
+  border-color: #FF5533;
+  box-shadow: 0 0 22px rgba(255,85,51,0.22), 0 6px 20px rgba(0,0,0,0.5);
+  transform: translateY(-3px);
+}
+
+.card-top  { padding: 22px 22px 16px; border-bottom: 1px solid #1e1e38; }
+.card-body { padding: 16px 22px 22px; }
+
+.card-num  { font-size: 9px; color: #666; letter-spacing: 3px; margin-bottom: 10px; }
+
+.card-title { font-size: 24px; font-weight: bold; letter-spacing: 2px; margin-bottom: 8px; }
+#card-tetris .card-title { color: #F0F000; }
+#card-drm    .card-title { color: #FF5533; }
+
+.card-year { font-size: 9px; color: #666; letter-spacing: 2px; }
+
+.card-desc { font-size: 10px; color: #aaa; line-height: 1.8; margin-bottom: 16px; }
+
+.card-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 18px; }
+.tag { font-size: 7px; letter-spacing: 1px; padding: 3px 8px; border: 1px solid #333; color: #888; }
+
+/* ── Level picker ───────────────────────────────────────────────────── */
+.level-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.level-label { font-size: 9px; color: #666; letter-spacing: 2px; flex: 1; }
+
+.lvl-btn {
+  background: #1a1a30;
+  border: 1px solid #333;
+  color: #888;
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+  width: 26px; height: 26px;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: background 0.08s, color 0.08s;
+  flex-shrink: 0;
+}
+.lvl-btn:hover { background: #2a2a44; color: #fff; }
+
+.lvl-val {
+  font-size: 18px;
+  font-weight: bold;
+  min-width: 36px;
+  text-align: center;
+}
+#card-tetris .lvl-val { color: #F0F000; }
+#card-drm    .lvl-val { color: #FF5533; }
+
+.card-cta { font-size: 10px; letter-spacing: 2px; font-weight: bold; color: #888; }
+#card-tetris.active .card-cta { color: #F0F000; }
+#card-drm.active    .card-cta { color: #FF5533; }
+
+.footer { margin-top: 48px; font-size: 9px; color: #666; letter-spacing: 2px; text-align: center; line-height: 2; }
+</style>
+</head>
+<body>
+
+<header class="header">
+  <div class="title">ARCADE</div>
+  <div class="subtitle">SELECT YOUR GAME</div>
+</header>
+
+<div class="games">
+
+  <a class="card active" id="card-tetris" href="tetris.html">
+    <div class="card-top">
+      <div class="card-num">[ 1 ]</div>
+      <div class="card-title">TETRIS</div>
+      <div class="card-year">NINTENDO · NES · 1989</div>
+    </div>
+    <div class="card-body">
+      <div class="card-desc">
+        Rotate and stack falling tetrominoes.<br>
+        Clear lines to score — four at once<br>
+        earns a Tetris bonus.
+      </div>
+      <div class="card-tags">
+        <span class="tag">PUZZLE</span>
+        <span class="tag">NES RULES</span>
+        <span class="tag">7-BAG</span>
+        <span class="tag">MUSIC</span>
+      </div>
+      <div class="level-row">
+        <span class="level-label">LEVEL</span>
+        <button class="lvl-btn" id="tetris-dec">◄</button>
+        <span class="lvl-val" id="tetris-lvl">0</span>
+        <button class="lvl-btn" id="tetris-inc">►</button>
+      </div>
+      <div class="card-cta" id="tetris-cta">▶ PRESS 1 OR ENTER</div>
+    </div>
+  </a>
+
+  <a class="card" id="card-drm" href="doctor-mario.html">
+    <div class="card-top">
+      <div class="card-num">[ 2 ]</div>
+      <div class="card-title">DR. MARIO</div>
+      <div class="card-year">NINTENDO · NES · 1990</div>
+    </div>
+    <div class="card-body">
+      <div class="card-desc">
+        Drop two-colour pills to align four<br>
+        same-colour cells and eliminate viruses.<br>
+        Chain clears for combo points.
+      </div>
+      <div class="card-tags">
+        <span class="tag">PUZZLE</span>
+        <span class="tag">MATCH-4</span>
+        <span class="tag">CHAINS</span>
+        <span class="tag">MUSIC</span>
+      </div>
+      <div class="level-row">
+        <span class="level-label">LEVEL</span>
+        <button class="lvl-btn" id="drm-dec">◄</button>
+        <span class="lvl-val" id="drm-lvl">0</span>
+        <button class="lvl-btn" id="drm-inc">►</button>
+      </div>
+      <div class="card-cta" id="drm-cta">▶ PRESS 2</div>
+    </div>
+  </a>
+
+</div>
+
+<footer class="footer">
+  ← →  switch game &nbsp;·&nbsp; ↑ ↓  change level &nbsp;·&nbsp; ENTER / 1 / 2  play
+</footer>
+
+<script>
+const MAXLVL = { tetris: 9, drm: 19 };
+const levels = { tetris: 0, drm: 0 };
+const cards  = [document.getElementById('card-tetris'), document.getElementById('card-drm')];
+const keys   = ['tetris', 'drm'];
+const urls   = ['tetris.html', 'doctor-mario.html'];
+let sel = 0;
+
+function updateDisplay(game) {
+  document.getElementById(game + '-lvl').textContent = String(levels[game]).padStart(2, '0');
+}
+
+function changeLevel(game, dir) {
+  levels[game] = Math.max(0, Math.min(MAXLVL[game], levels[game] + dir));
+  updateDisplay(game);
+}
+
+function select(i) {
+  cards[sel].classList.remove('active');
+  sel = (i + cards.length) % cards.length;
+  cards[sel].classList.add('active');
+}
+
+function launch(i) {
+  window.location.href = urls[i] + '?level=' + levels[keys[i]];
+}
+
+// Picker buttons — stop propagation so card link doesn't fire
+document.getElementById('tetris-dec').addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); changeLevel('tetris', -1); });
+document.getElementById('tetris-inc').addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); changeLevel('tetris',  1); });
+document.getElementById('drm-dec').addEventListener('click',    e => { e.preventDefault(); e.stopPropagation(); changeLevel('drm',    -1); });
+document.getElementById('drm-inc').addEventListener('click',    e => { e.preventDefault(); e.stopPropagation(); changeLevel('drm',     1); });
+
+// Card clicks navigate with level
+cards.forEach((card, i) => {
+  card.addEventListener('click', e => { e.preventDefault(); launch(i); });
+  card.addEventListener('mouseenter', () => select(i));
+});
+
+document.addEventListener('keydown', e => {
+  switch (e.key) {
+    case 'ArrowLeft':  select(sel - 1); e.preventDefault(); break;
+    case 'ArrowRight': select(sel + 1); e.preventDefault(); break;
+    case 'ArrowUp':    changeLevel(keys[sel],  1); e.preventDefault(); break;
+    case 'ArrowDown':  changeLevel(keys[sel], -1); e.preventDefault(); break;
+    case 'Enter': case ' ': launch(sel); break;
+    case '1': launch(0); break;
+    case '2': launch(1); break;
+  }
+});
+
+updateDisplay('tetris');
+updateDisplay('drm');
+</script>
+</body>
+</html>

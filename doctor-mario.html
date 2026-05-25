@@ -1,0 +1,858 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>DR. MARIO</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  background: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  font-family: 'Courier New', Courier, monospace;
+  overflow: hidden;
+}
+#wrapper { position: relative; }
+canvas { display: block; image-rendering: pixelated; image-rendering: crisp-edges; }
+#touch-bar {
+  display: none;
+  width: 100%;
+  height: 80px;
+  background: #05050d;
+  border-top: 1px solid #222;
+  justify-content: space-around;
+  align-items: center;
+  padding: 0 8px;
+  gap: 6px;
+}
+.tb {
+  flex: 1;
+  height: 58px;
+  background: #101025;
+  border: 1px solid #333;
+  color: #bbb;
+  font-size: 20px;
+  border-radius: 4px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  display: flex; align-items: center; justify-content: center;
+}
+.tb:active { background: #202040; color: #fff; }
+#wrapper::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(to bottom,
+    transparent 0px, transparent 2px,
+    rgba(0,0,0,0.08) 2px, rgba(0,0,0,0.08) 4px);
+  pointer-events: none;
+  z-index: 10;
+}
+</style>
+</head>
+<body>
+<div id="wrapper"><canvas id="game"></canvas></div>
+<div id="touch-bar">
+  <button class="tb" id="tb-left">◄</button>
+  <button class="tb" id="tb-rot">▲</button>
+  <button class="tb" id="tb-drop">▼</button>
+  <button class="tb" id="tb-right">►</button>
+  <button class="tb" id="tb-pause">⏸</button>
+</div>
+<script>
+'use strict';
+
+// ─── Layout ──────────────────────────────────────────────────────────────────
+const COLS = 8, ROWS = 16;
+const PAD = 14, GAP = 14, PANEL_W = 162, STRIP_H = 54;
+let BLOCK, BOARD_W, BOARD_H, CW, CH, narrowMode = false;
+
+function computeLayout() {
+  const vw = window.innerWidth, vh = window.innerHeight;
+  narrowMode = vw < 560;
+  if (narrowMode) {
+    const avH = vh - 80 - STRIP_H - PAD * 2;
+    BLOCK = Math.max(14, Math.min(Math.floor((vw - PAD * 2) / COLS), Math.floor(avH / ROWS)));
+  } else {
+    BLOCK = Math.max(18, Math.min(32, Math.floor((vw - PAD * 2 - GAP - PANEL_W) / COLS)));
+  }
+  BOARD_W = COLS * BLOCK; BOARD_H = ROWS * BLOCK;
+  CW = narrowMode ? vw : PAD + BOARD_W + GAP + PANEL_W + PAD;
+  CH = PAD + BOARD_H + PAD + (narrowMode ? STRIP_H : 0);
+  const canvas = document.getElementById('game');
+  if (canvas) { canvas.width = CW; canvas.height = CH; }
+}
+
+// ─── Colors ───────────────────────────────────────────────────────────────────
+const PILL_COLORS = ['R', 'Y', 'B'];
+const COLOR_MAP = { R: '#EE3311', Y: '#FFCC00', B: '#2266EE' };
+const DARK_MAP  = { R: '#771100', Y: '#776600', B: '#112266' };
+
+// ─── Gravity ms/step by level ─────────────────────────────────────────────────
+const GRAVITY = [
+  1000,900,800,700,600,500,450,400,350,300,
+   250,200,160,130,100, 80, 60, 50, 40, 35
+];
+
+// ─── Audio ────────────────────────────────────────────────────────────────────
+let audioCtx = null, masterGain = null, musicGain = null, sfxGain = null;
+let musicEnabled = true, musicRunning = false;
+let melodyLoopStart = 0, melodySchedTimer = null;
+
+const BPM = 160, Q = 60 / BPM;
+
+const N = {
+  G3:196.00, A3:220.00, B3:246.94,
+  C4:261.63, D4:293.66, E4:329.63, F4:349.23, G4:392.00, A4:440.00, B4:493.88,
+  C5:523.25, D5:587.33, E5:659.25, F5:698.46, G5:783.99, A5:880.00, B5:987.77,
+  _: 0
+};
+
+// Doctor Mario "Fever" theme (approximate NES melody)
+const MELODY = [
+  // phrase 1 — 16 beats
+  [N.E5,1],[N.A4,0.5],[N.B4,0.5],[N.C5,0.5],[N.D5,0.5],[N.E5,1],
+  [N.A5,1],[N.G5,0.5],[N.F5,0.5],[N.E5,2],
+  [N.G5,1],[N.B4,0.5],[N.C5,0.5],[N.D5,0.5],[N.E5,0.5],[N.F5,1],
+  [N.E5,1],[N.D5,1],[N.C5,2],
+  // phrase 2 — 16 beats
+  [N.D5,1],[N.G4,0.5],[N.A4,0.5],[N.B4,0.5],[N.C5,0.5],[N.D5,1],
+  [N.G5,1],[N.F5,0.5],[N.E5,0.5],[N.D5,2],
+  [N.C5,1],[N.D5,0.5],[N.E5,0.5],[N.F5,0.5],[N.E5,0.5],[N.D5,1],
+  [N.C5,1.5],[N.B4,0.5],[N.A4,2],
+];
+
+const BASS = [
+  [N.A3,2],[N.A3,2],[N.A3,2],[N.A3,2],
+  [N.E4,2],[N.E4,2],[N.A3,2],[N.A3,2],
+  [N.G4,2],[N.G4,2],[N.C4,2],[N.C4,2],
+  [N.E4,2],[N.E4,2],[N.A3,2],[N.A3,2],
+];
+
+const MELODY_DUR = MELODY.reduce((s, [,d]) => s + d, 0) * Q;
+
+function initAudio() {
+  if (audioCtx) { audioCtx.resume(); return; }
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  masterGain = audioCtx.createGain(); masterGain.gain.value = 1.0; masterGain.connect(audioCtx.destination);
+  musicGain  = audioCtx.createGain(); musicGain.gain.value  = 0.18; musicGain.connect(masterGain);
+  sfxGain    = audioCtx.createGain(); sfxGain.gain.value    = 0.30; sfxGain.connect(masterGain);
+}
+
+function playOsc(freq, t, dur, type, vol, dest) {
+  if (!audioCtx || !freq) return;
+  const osc = audioCtx.createOscillator(), g = audioCtx.createGain();
+  osc.connect(g); g.connect(dest);
+  osc.type = type; osc.frequency.setValueAtTime(freq, t);
+  g.gain.setValueAtTime(vol, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+  osc.start(t); osc.stop(t + dur + 0.01);
+}
+
+function scheduleMelody(startT) {
+  if (!audioCtx || !musicGain) return;
+  let t = startT;
+  for (const [f, beats] of MELODY) {
+    const d = beats * Q;
+    if (f > 0) playOsc(f, t, d * 0.85, 'square', 1, musicGain);
+    t += d;
+  }
+  t = startT;
+  for (const [f, beats] of BASS) {
+    const d = beats * Q;
+    playOsc(f, t, d * 0.7, 'triangle', 0.5, musicGain);
+    t += d;
+  }
+}
+
+function runSched() {
+  if (!musicRunning || !audioCtx) return;
+  if (audioCtx.currentTime + 1.0 >= melodyLoopStart) {
+    scheduleMelody(melodyLoopStart);
+    melodyLoopStart += MELODY_DUR;
+  }
+  melodySchedTimer = setTimeout(runSched, 500);
+}
+
+function startMusic() {
+  if (!audioCtx || musicRunning) return;
+  musicRunning = true; melodyLoopStart = audioCtx.currentTime + 0.05;
+  runSched();
+}
+
+function stopMusic() {
+  musicRunning = false;
+  if (melodySchedTimer) { clearTimeout(melodySchedTimer); melodySchedTimer = null; }
+  if (musicGain) {
+    musicGain.gain.cancelScheduledValues(audioCtx.currentTime);
+    musicGain.gain.setValueAtTime(musicGain.gain.value, audioCtx.currentTime);
+    musicGain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.3);
+  }
+}
+
+function setMusicEnabled(on) {
+  musicEnabled = on;
+  if (!musicGain) return;
+  const now = audioCtx.currentTime;
+  musicGain.gain.cancelScheduledValues(now);
+  musicGain.gain.setValueAtTime(musicGain.gain.value, now);
+  musicGain.gain.linearRampToValueAtTime(on ? 0.18 : 0, now + 0.15);
+}
+
+function setPaused(on) {
+  if (!musicGain || !audioCtx) return;
+  const now = audioCtx.currentTime;
+  musicGain.gain.cancelScheduledValues(now);
+  musicGain.gain.setValueAtTime(musicGain.gain.value, now);
+  musicGain.gain.linearRampToValueAtTime(on ? 0 : (musicEnabled ? 0.18 : 0), now + 0.1);
+}
+
+// ─── SFX ─────────────────────────────────────────────────────────────────────
+function sfxMove()   { if (audioCtx) playOsc(200, audioCtx.currentTime, 0.04, 'square', 0.5, sfxGain); }
+function sfxRotate() { if (audioCtx) playOsc(320, audioCtx.currentTime, 0.05, 'square', 0.45, sfxGain); }
+
+function sfxLock() {
+  if (!audioCtx) return;
+  const t = audioCtx.currentTime;
+  const osc = audioCtx.createOscillator(), g = audioCtx.createGain();
+  osc.connect(g); g.connect(sfxGain); osc.type = 'square';
+  osc.frequency.setValueAtTime(150, t);
+  osc.frequency.exponentialRampToValueAtTime(60, t + 0.1);
+  g.gain.setValueAtTime(0.5, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
+  osc.start(t); osc.stop(t + 0.15);
+}
+
+function sfxClear(virusesCleared) {
+  if (!audioCtx) return;
+  const t = audioCtx.currentTime;
+  if (virusesCleared > 0) {
+    [523, 659, 784, 1047].forEach((f, i) => playOsc(f, t + i * 0.06, 0.15, 'square', 0.6, sfxGain));
+  } else {
+    [330, 440, 550].forEach((f, i) => playOsc(f, t + i * 0.055, 0.1, 'square', 0.45, sfxGain));
+  }
+}
+
+function sfxWin() {
+  if (!audioCtx) return;
+  const t = audioCtx.currentTime;
+  [523, 659, 784, 1047, 1319, 1568].forEach((f, i) => playOsc(f, t + i * 0.1, 0.25, 'square', 0.6, sfxGain));
+}
+
+function sfxGameOver() {
+  if (!audioCtx) return;
+  const t = audioCtx.currentTime;
+  [494, 440, 370, 294, 220].forEach((f, i) => playOsc(f, t + i * 0.14, 0.18, 'square', 0.5, sfxGain));
+}
+
+// ─── Game state ───────────────────────────────────────────────────────────────
+// Board cells: null  |  { color:'R'|'Y'|'B', type:'pill'|'virus', conn:'L'|'R'|'U'|'D'|null }
+let board, pill, nextColors;
+let score, level, virusCount;
+let gameOver, gameWon, paused, started;
+let lastDrop, dropMs, softDrop = false, chainCount = 0;
+let startLevel = 0;
+let raf;
+
+function rand(n) { return Math.floor(Math.random() * n); }
+function randColor() { return PILL_COLORS[rand(3)]; }
+
+// ─── Board init ───────────────────────────────────────────────────────────────
+function wouldMake3(b, r, c, color) {
+  let h = 1, v = 1;
+  for (let i = c - 1; i >= 0 && b[r][i]?.color === color; i--) h++;
+  for (let i = c + 1; i < COLS && b[r][i]?.color === color; i++) h++;
+  for (let i = r - 1; i >= 0 && b[i][c]?.color === color; i--) v++;
+  for (let i = r + 1; i < ROWS && b[i][c]?.color === color; i++) v++;
+  return h >= 3 || v >= 3;
+}
+
+function createBoard() {
+  const b = Array.from({ length: ROWS }, () => Array(COLS).fill(null));
+  const count = Math.min(84, (level + 1) * 4);
+  let placed = 0, attempts = 0;
+  while (placed < count && attempts < 4000) {
+    attempts++;
+    const r = rand(12) + 4, c = rand(COLS);
+    if (b[r][c]) continue;
+    const colors = [...PILL_COLORS].sort(() => Math.random() - 0.5);
+    for (const color of colors) {
+      if (!wouldMake3(b, r, c, color)) {
+        b[r][c] = { color, type: 'virus', conn: null };
+        placed++;
+        break;
+      }
+    }
+  }
+  return b;
+}
+
+function countViruses(b) {
+  let n = 0;
+  for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) if (b[r][c]?.type === 'virus') n++;
+  return n;
+}
+
+// ─── Pill mechanics ───────────────────────────────────────────────────────────
+function pillCells(p) {
+  return p.ori === 'H'
+    ? [{ r: p.y, c: p.x, ci: 0 }, { r: p.y, c: p.x + 1, ci: 1 }]
+    : [{ r: p.y, c: p.x, ci: 0 }, { r: p.y + 1, c: p.x, ci: 1 }];
+}
+
+function pillFits(p) {
+  for (const { r, c } of pillCells(p)) {
+    if (c < 0 || c >= COLS || r >= ROWS) return false;
+    if (r >= 0 && board[r][c] !== null) return false;
+  }
+  return true;
+}
+
+function spawnPill() {
+  pill = { x: 3, y: 0, ori: 'H', colors: [...nextColors] };
+  nextColors = [randColor(), randColor()];
+  if (!pillFits(pill)) { triggerGameOver(); return false; }
+  return true;
+}
+
+function connFor(ori, ci) {
+  if (ori === 'H') return ci === 0 ? 'R' : 'L';
+  return ci === 0 ? 'D' : 'U';
+}
+
+function lockPill() {
+  sfxLock();
+  for (const { r, c, ci } of pillCells(pill)) {
+    if (r >= 0 && r < ROWS)
+      board[r][c] = { color: pill.colors[ci], type: 'pill', conn: connFor(pill.ori, ci) };
+  }
+  pill = null;
+  chainCount = 0;
+  processMatches();
+}
+
+function updateConns() {
+  for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
+    const cell = board[r][c];
+    if (!cell || cell.type !== 'pill' || !cell.conn) continue;
+    let pr = r, pc = c;
+    if (cell.conn === 'R') pc++; else if (cell.conn === 'L') pc--;
+    else if (cell.conn === 'D') pr++; else pr--;
+    const partner = (pr >= 0 && pr < ROWS && pc >= 0 && pc < COLS) ? board[pr][pc] : null;
+    if (!partner || partner.type !== 'pill') cell.conn = null;
+  }
+}
+
+function applyGravity() {
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (let r = ROWS - 2; r >= 0; r--) {
+      for (let c = 0; c < COLS; c++) {
+        if (board[r][c]?.type === 'pill' && board[r + 1][c] === null) {
+          board[r + 1][c] = board[r][c];
+          board[r][c] = null;
+          changed = true;
+        }
+      }
+    }
+  }
+  updateConns();
+}
+
+function findMatches() {
+  const matched = new Set();
+  // horizontal
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS;) {
+      if (!board[r][c]) { c++; continue; }
+      const color = board[r][c].color;
+      let end = c + 1;
+      while (end < COLS && board[r][end]?.color === color) end++;
+      if (end - c >= 4) for (let k = c; k < end; k++) matched.add(r * COLS + k);
+      c = end;
+    }
+  }
+  // vertical
+  for (let c = 0; c < COLS; c++) {
+    for (let r = 0; r < ROWS;) {
+      if (!board[r][c]) { r++; continue; }
+      const color = board[r][c].color;
+      let end = r + 1;
+      while (end < ROWS && board[end][c]?.color === color) end++;
+      if (end - r >= 4) for (let k = r; k < end; k++) matched.add(k * COLS + c);
+      r = end;
+    }
+  }
+  return matched;
+}
+
+function processMatches() {
+  while (true) {
+    const matched = findMatches();
+    if (matched.size === 0) {
+      chainCount = 0;
+      if (virusCount === 0) { triggerWin(); return; }
+      spawnPill();
+      return;
+    }
+    let virusCleared = 0;
+    for (const key of matched) {
+      const r = Math.floor(key / COLS), c = key % COLS;
+      if (board[r][c]?.type === 'virus') virusCleared++;
+      board[r][c] = null;
+    }
+    virusCount -= virusCleared;
+    const pillCleared = matched.size - virusCleared;
+    const mult = Math.pow(2, chainCount);
+    score += Math.round((virusCleared * 100 + pillCleared * 10) * mult * (level + 1));
+    chainCount++;
+    sfxClear(virusCleared);
+    applyGravity();
+  }
+}
+
+function rotatePill() {
+  if (!pill) return;
+  if (pill.ori === 'H') {
+    // H→V: anchor stays at (x,y); second cell moves from (x+1,y) to (x,y+1)
+    const p = { ...pill, ori: 'V' };
+    if (pillFits(p)) { pill = p; sfxRotate(); }
+    // if (x,y+1) blocked, rotation simply fails — no upward drift
+  } else {
+    // V→H: swap colors so the cycle is A-left→A-top→B-left→B-top→A-left (4 states)
+    const swapped = [pill.colors[1], pill.colors[0]];
+    const p = { ...pill, ori: 'H', colors: swapped };
+    if (pillFits(p)) { pill = p; sfxRotate(); return; }
+    // wall-kick left ONLY when x+1 is beyond the right wall
+    if (pill.x + 1 >= COLS) {
+      const p2 = { ...pill, ori: 'H', x: pill.x - 1, colors: swapped };
+      if (pillFits(p2)) { pill = p2; sfxRotate(); }
+    }
+  }
+}
+
+function triggerGameOver() {
+  gameOver = true; stopMusic();
+  if (raf) cancelAnimationFrame(raf);
+  sfxGameOver(); render();
+}
+
+function triggerWin() {
+  gameWon = true; stopMusic();
+  if (raf) cancelAnimationFrame(raf);
+  sfxWin(); render();
+}
+
+function init(lvl) {
+  level = lvl !== undefined ? Math.max(0, Math.min(19, lvl)) : startLevel;
+  board = createBoard();
+  virusCount = countViruses(board);
+  nextColors = [randColor(), randColor()];
+  pill = null;
+  score = 0; chainCount = 0;
+  gameOver = false; gameWon = false; paused = false; started = true; softDrop = false;
+  dropMs = GRAVITY[Math.min(level, GRAVITY.length - 1)];
+  lastDrop = performance.now();
+  initAudio(); stopMusic();
+  setTimeout(() => startMusic(), 200);
+  if (raf) cancelAnimationFrame(raf);
+  raf = requestAnimationFrame(gameLoop);
+  spawnPill();
+}
+
+// ─── Game loop ────────────────────────────────────────────────────────────────
+function gameLoop(now) {
+  raf = requestAnimationFrame(gameLoop);
+  if (paused || gameOver || gameWon || !pill) return;
+  const interval = softDrop ? Math.min(dropMs, 50) : dropMs;
+  if (now - lastDrop >= interval) {
+    const cells = pillCells(pill);
+    const canFall = cells.every(({ r, c }) => r + 1 < ROWS && board[r + 1][c] === null);
+    if (canFall) {
+      pill.y++;
+      if (softDrop) score++;
+    } else {
+      lockPill();
+    }
+    lastDrop = now;
+  }
+  render();
+}
+
+// ─── Canvas & drawing ─────────────────────────────────────────────────────────
+computeLayout();
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+
+function rrCorners(x, y, w, h, tl, tr, br, bl) {
+  ctx.beginPath();
+  ctx.moveTo(x + tl, y);
+  ctx.lineTo(x + w - tr, y);
+  if (tr) ctx.arcTo(x + w, y, x + w, y + tr, tr); else ctx.lineTo(x + w, y);
+  ctx.lineTo(x + w, y + h - br);
+  if (br) ctx.arcTo(x + w, y + h, x + w - br, y + h, br); else ctx.lineTo(x + w, y + h);
+  ctx.lineTo(x + bl, y + h);
+  if (bl) ctx.arcTo(x, y + h, x, y + h - bl, bl); else ctx.lineTo(x, y + h);
+  ctx.lineTo(x, y + tl);
+  if (tl) ctx.arcTo(x, y, x + tl, y, tl); else ctx.lineTo(x, y);
+  ctx.closePath();
+}
+
+// conn: which side connects to partner (that side is flat, outer side rounded)
+function drawPillHalf(bx, by, color, conn, nb) {
+  nb = nb || BLOCK;
+  const s = nb - 1, R = Math.round(nb * 0.26);
+  let tl = R, tr = R, br = R, bl = R;
+  if (conn === 'R') { tr = 0; br = 0; }
+  if (conn === 'L') { tl = 0; bl = 0; }
+  if (conn === 'D') { br = 0; bl = 0; }
+  if (conn === 'U') { tl = 0; tr = 0; }
+  ctx.fillStyle = COLOR_MAP[color];
+  rrCorners(bx, by, s, s, tl, tr, br, bl); ctx.fill();
+  // top highlight
+  ctx.fillStyle = 'rgba(255,255,255,0.38)';
+  rrCorners(bx, by, s, 4, tl, tr, 0, 0); ctx.fill();
+  // left highlight
+  ctx.fillStyle = 'rgba(255,255,255,0.18)';
+  ctx.fillRect(bx, by, 3, s);
+  // bottom & right shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.32)';
+  ctx.fillRect(bx, by + s - 3, s, 3);
+  ctx.fillRect(bx + s - 3, by, 3, s);
+}
+
+function drawVirus(bx, by, color) {
+  const cx = bx + BLOCK / 2 - 0.5, cy = by + BLOCK / 2 - 0.5;
+  const rx = BLOCK * 0.37, ry = BLOCK * 0.34;
+  // shadow
+  ctx.fillStyle = DARK_MAP[color];
+  ctx.beginPath(); ctx.ellipse(cx + 1, cy + 1, rx + 1, ry + 1, 0, 0, Math.PI * 2); ctx.fill();
+  // body
+  ctx.fillStyle = COLOR_MAP[color];
+  ctx.beginPath(); ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2); ctx.fill();
+  // cross lines (cell wall look)
+  ctx.strokeStyle = DARK_MAP[color]; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.moveTo(cx - rx, cy); ctx.lineTo(cx + rx, cy); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(cx, cy - ry); ctx.lineTo(cx, cy + ry); ctx.stroke();
+  // sheen
+  ctx.fillStyle = 'rgba(255,255,255,0.28)';
+  ctx.beginPath(); ctx.ellipse(cx - rx * 0.28, cy - ry * 0.28, rx * 0.38, ry * 0.32, -0.3, 0, Math.PI * 2); ctx.fill();
+  // eyes
+  const ew = BLOCK * 0.065;
+  ctx.fillStyle = '#111';
+  ctx.beginPath(); ctx.arc(cx - rx * 0.32, cy - ry * 0.08, ew, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(cx + rx * 0.32, cy - ry * 0.08, ew, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#fff';
+  ctx.beginPath(); ctx.arc(cx - rx * 0.32 - 1, cy - ry * 0.08 - 1, ew * 0.38, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(cx + rx * 0.32 - 1, cy - ry * 0.08 - 1, ew * 0.38, 0, Math.PI * 2); ctx.fill();
+  // mouth (frown)
+  ctx.strokeStyle = '#111'; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.arc(cx, cy + ry * 0.28, rx * 0.3, 0, Math.PI); ctx.stroke();
+}
+
+function drawCell(c, r, cell) {
+  const bx = PAD + c * BLOCK, by = PAD + r * BLOCK;
+  if (cell.type === 'virus') drawVirus(bx, by, cell.color);
+  else drawPillHalf(bx, by, cell.color, cell.conn);
+}
+
+function drawActivePill() {
+  if (!pill) return;
+  for (const { r, c, ci } of pillCells(pill)) {
+    if (r >= 0 && r < ROWS)
+      drawPillHalf(PAD + c * BLOCK, PAD + r * BLOCK, pill.colors[ci], connFor(pill.ori, ci));
+  }
+}
+
+function render() {
+  ctx.fillStyle = '#070712'; ctx.fillRect(0, 0, CW, CH);
+  ctx.fillStyle = '#040410'; ctx.fillRect(PAD, PAD, BOARD_W, BOARD_H);
+
+  // grid
+  ctx.strokeStyle = '#16163a'; ctx.lineWidth = 0.5; ctx.globalAlpha = 0.7;
+  for (let c = 1; c < COLS; c++) {
+    ctx.beginPath(); ctx.moveTo(PAD + c * BLOCK, PAD); ctx.lineTo(PAD + c * BLOCK, PAD + BOARD_H); ctx.stroke();
+  }
+  for (let r = 1; r < ROWS; r++) {
+    ctx.beginPath(); ctx.moveTo(PAD, PAD + r * BLOCK); ctx.lineTo(PAD + BOARD_W, PAD + r * BLOCK); ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+
+  // board border
+  ctx.strokeStyle = '#888'; ctx.lineWidth = 2;
+  ctx.strokeRect(PAD - 2, PAD - 2, BOARD_W + 4, BOARD_H + 4);
+  ctx.strokeStyle = '#444'; ctx.lineWidth = 1;
+  ctx.strokeRect(PAD - 4, PAD - 4, BOARD_W + 8, BOARD_H + 8);
+
+  for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) if (board[r][c]) drawCell(c, r, board[r][c]);
+  if (!gameOver && !gameWon) drawActivePill();
+
+  if (narrowMode) drawStatsStrip(); else drawPanel();
+
+  if (paused && !gameOver && !gameWon) {
+    ctx.fillStyle = 'rgba(0,0,0,0.72)'; ctx.fillRect(PAD, PAD, BOARD_W, BOARD_H);
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#FFCC00'; ctx.font = 'bold 18px "Courier New",monospace';
+    ctx.fillText('- PAUSED -', PAD + BOARD_W / 2, PAD + BOARD_H / 2);
+    ctx.fillStyle = '#888'; ctx.font = '10px "Courier New",monospace';
+    ctx.fillText('Press P to continue', PAD + BOARD_W / 2, PAD + BOARD_H / 2 + 22);
+  }
+
+  if (gameOver) {
+    ctx.fillStyle = 'rgba(0,0,0,0.80)'; ctx.fillRect(PAD, PAD, BOARD_W, BOARD_H);
+    ctx.textAlign = 'center';
+    const mx = PAD + BOARD_W / 2;
+    ctx.fillStyle = '#EE3311'; ctx.font = 'bold 20px "Courier New",monospace';
+    ctx.fillText('GAME OVER', mx, PAD + BOARD_H / 2 - 20);
+    ctx.fillStyle = '#FFCC00'; ctx.font = 'bold 11px "Courier New",monospace';
+    ctx.fillText('Score: ' + score, mx, PAD + BOARD_H / 2 + 8);
+    ctx.fillStyle = '#aaa'; ctx.font = '10px "Courier New",monospace';
+    ctx.fillText('Press R to play again', mx, PAD + BOARD_H / 2 + 30);
+    ctx.fillStyle = '#555'; ctx.font = '9px "Courier New",monospace';
+    ctx.fillText('ESC  back to menu', mx, PAD + BOARD_H / 2 + 50);
+  }
+
+  if (gameWon) {
+    ctx.fillStyle = 'rgba(0,0,0,0.80)'; ctx.fillRect(PAD, PAD, BOARD_W, BOARD_H);
+    ctx.textAlign = 'center';
+    const mx = PAD + BOARD_W / 2;
+    ctx.fillStyle = '#00DD44'; ctx.font = 'bold 20px "Courier New",monospace';
+    ctx.fillText('STAGE CLEAR!', mx, PAD + BOARD_H / 2 - 28);
+    ctx.fillStyle = '#FFCC00'; ctx.font = 'bold 11px "Courier New",monospace';
+    ctx.fillText('Score: ' + score, mx, PAD + BOARD_H / 2 - 4);
+    ctx.fillStyle = '#00F0F0'; ctx.font = '10px "Courier New",monospace';
+    ctx.fillText('Press N  next level', mx, PAD + BOARD_H / 2 + 18);
+    ctx.fillStyle = '#aaa'; ctx.font = '10px "Courier New",monospace';
+    ctx.fillText('Press R  restart', mx, PAD + BOARD_H / 2 + 36);
+    ctx.fillStyle = '#555'; ctx.font = '9px "Courier New",monospace';
+    ctx.fillText('ESC  back to menu', mx, PAD + BOARD_H / 2 + 56);
+  }
+}
+
+function drawStatsStrip() {
+  const sy = PAD + BOARD_H + PAD;
+  ctx.fillStyle = '#06060f'; ctx.fillRect(0, sy - PAD, CW, STRIP_H + PAD);
+  ctx.strokeStyle = '#333'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(0, sy - 1); ctx.lineTo(CW, sy - 1); ctx.stroke();
+
+  const slots = [
+    ['SCORE', String(score).padStart(7,'0'), '#FFCC00'],
+    ['LEVEL', String(level).padStart(2,'0'),  '#00F0F0'],
+    ['VIRUS', String(virusCount).padStart(3,'0'), '#FF6644'],
+  ];
+  const slotW = Math.floor(CW * 0.55 / 3);
+  slots.forEach(([label, value, color], i) => {
+    const sx = PAD + slotW * i + slotW / 2;
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#666'; ctx.font = 'bold 8px "Courier New",monospace';
+    ctx.fillText(label, sx, sy + 12);
+    ctx.fillStyle = color; ctx.font = `bold ${Math.max(11, BLOCK - 14)}px "Courier New",monospace`;
+    ctx.fillText(value, sx, sy + 30);
+  });
+
+  // next pill (right side)
+  const nb = Math.max(12, Math.floor(BLOCK * 0.6));
+  const nx = PAD + Math.floor(CW * 0.62), ny = sy + 4, nw = CW - nx - PAD, nh = STRIP_H - 8;
+  ctx.fillStyle = '#030310'; ctx.fillRect(nx, ny, nw, nh);
+  ctx.strokeStyle = '#333'; ctx.lineWidth = 1; ctx.strokeRect(nx, ny, nw, nh);
+  ctx.fillStyle = '#555'; ctx.font = '7px "Courier New",monospace'; ctx.textAlign = 'center';
+  ctx.fillText('NEXT', nx + nw / 2, ny + 9);
+  if (nextColors) {
+    const npx = nx + (nw - nb * 2) / 2, npy = ny + (nh - nb) / 2 + 2;
+    drawPillHalf(npx,      npy, nextColors[0], 'R', nb);
+    drawPillHalf(npx + nb, npy, nextColors[1], 'L', nb);
+  }
+}
+
+function drawPanel() {
+  const px = PAD + BOARD_W + GAP, py = PAD, cx = px + PANEL_W / 2;
+  ctx.fillStyle = '#06060f'; ctx.fillRect(px, py, PANEL_W, BOARD_H);
+  ctx.strokeStyle = '#888'; ctx.lineWidth = 2;
+  ctx.strokeRect(px - 2, py - 2, PANEL_W + 4, BOARD_H + 4);
+  ctx.strokeStyle = '#444'; ctx.lineWidth = 1;
+  ctx.strokeRect(px - 4, py - 4, PANEL_W + 8, BOARD_H + 8);
+  ctx.textAlign = 'center';
+
+  // title
+  ctx.fillStyle = '#FFCC00'; ctx.font = 'bold 15px "Courier New",monospace';
+  ctx.fillText('DR. MARIO', cx, py + 28);
+  ctx.fillStyle = '#EE3311'; ctx.fillRect(px + 10, py + 34, PANEL_W - 20, 2);
+
+  function stat(label, value, color, labelY) {
+    ctx.fillStyle = '#999'; ctx.font = 'bold 9px "Courier New",monospace';
+    ctx.fillText(label, cx, labelY);
+    ctx.fillStyle = color; ctx.font = 'bold 16px "Courier New",monospace';
+    ctx.fillText(value, cx, labelY + 22);
+  }
+  stat('SCORE',  String(score).padStart(7, '0'), '#FFCC00', py + 62);
+  stat('LEVEL',  String(level).padStart(2, '0'), '#00F0F0', py + 122);
+  stat('VIRUS',  String(virusCount).padStart(3, '0'), '#FF6644', py + 180);
+
+  // next pill
+  ctx.fillStyle = '#aaa'; ctx.font = 'bold 9px "Courier New",monospace';
+  ctx.fillText('NEXT', cx, py + 234);
+  const bx = px + 14, by = py + 242, bw = PANEL_W - 28, bh = 56;
+  ctx.fillStyle = '#030310'; ctx.fillRect(bx, by, bw, bh);
+  ctx.strokeStyle = '#555'; ctx.lineWidth = 1; ctx.strokeRect(bx, by, bw, bh);
+  if (nextColors) {
+    const nb = 26, npx = bx + (bw - nb * 2) / 2, npy = by + (bh - nb) / 2;
+    drawPillHalf(npx,        npy, nextColors[0], 'R', nb);
+    drawPillHalf(npx + nb,   npy, nextColors[1], 'L', nb);
+  }
+
+  // music
+  ctx.fillStyle = musicEnabled ? '#44DD66' : '#666';
+  ctx.font = '9px "Courier New",monospace';
+  ctx.fillText(musicEnabled ? '♪ MUSIC ON' : '♪ MUSIC OFF', cx, py + BOARD_H - 122);
+
+  // controls
+  ctx.fillStyle = '#777'; ctx.font = '8px "Courier New",monospace';
+  const hy = py + BOARD_H - 110;
+  ctx.fillText('← →  move',         cx, hy);
+  ctx.fillText('↑  rotate',          cx, hy + 13);
+  ctx.fillText('↓  soft drop',       cx, hy + 26);
+  ctx.fillText('P  pause',           cx, hy + 39);
+  ctx.fillText('M  music on/off',    cx, hy + 52);
+  ctx.fillText('R  restart',         cx, hy + 65);
+  ctx.fillText('N  next level (win)',cx, hy + 78);
+  ctx.fillStyle = '#555';
+  ctx.fillText('ESC  menu',          cx, hy + 94);
+}
+
+function drawStartScreen() {
+  ctx.fillStyle = '#070712'; ctx.fillRect(0, 0, CW, CH);
+  ctx.strokeStyle = '#888'; ctx.lineWidth = 2;
+  ctx.strokeRect(PAD - 2, PAD - 2, BOARD_W + 4, BOARD_H + 4);
+  ctx.textAlign = 'center';
+  const mx = PAD + BOARD_W / 2;
+
+  ctx.fillStyle = '#FFCC00'; ctx.font = 'bold 30px "Courier New",monospace';
+  ctx.fillText('DR. MARIO', mx, PAD + BOARD_H / 2 - 90);
+  ctx.fillStyle = '#EE3311'; ctx.font = 'bold 13px "Courier New",monospace';
+  ctx.fillText('★  ★  ★', mx, PAD + BOARD_H / 2 - 60);
+
+  ctx.fillStyle = '#aaa'; ctx.font = '9px "Courier New",monospace';
+  ctx.fillText('Match 4+ same-colour pills & viruses', mx, PAD + BOARD_H / 2 - 28);
+  ctx.fillText('to clear all viruses and win the stage', mx, PAD + BOARD_H / 2 - 14);
+
+  // level picker
+  const lpy = PAD + BOARD_H / 2 + 8;
+  ctx.fillStyle = '#666'; ctx.font = 'bold 9px "Courier New",monospace';
+  ctx.fillText('STARTING LEVEL', mx, lpy);
+  ctx.fillStyle = '#888'; ctx.font = 'bold 13px "Courier New",monospace';
+  ctx.fillText('◄', mx - 32, lpy + 22);
+  ctx.fillStyle = '#FFCC00'; ctx.font = 'bold 20px "Courier New",monospace';
+  ctx.fillText(String(startLevel).padStart(2, '0'), mx, lpy + 24);
+  ctx.fillStyle = '#888'; ctx.font = 'bold 13px "Courier New",monospace';
+  ctx.fillText('►', mx + 26, lpy + 22);
+  ctx.fillStyle = '#555'; ctx.font = '8px "Courier New",monospace';
+  ctx.fillText('← →  or  0–9 keys  (max 19)', mx, lpy + 40);
+
+  ctx.fillStyle = '#00F0F0'; ctx.font = 'bold 13px "Courier New",monospace';
+  ctx.fillText('Press ENTER or R to start', mx, PAD + BOARD_H / 2 + 68);
+
+  ctx.fillStyle = '#777'; ctx.font = '8px "Courier New",monospace';
+  ctx.fillText('← → move  ↑ rotate  ↓ soft drop', mx, PAD + BOARD_H / 2 + 96);
+  ctx.fillText('chains earn combo bonus score',     mx, PAD + BOARD_H / 2 + 110);
+
+  ctx.fillStyle = '#555'; ctx.font = '8px "Courier New",monospace';
+  ctx.fillText('Original by Nintendo, 1990', mx, PAD + BOARD_H - 20);
+
+  // panel stub
+  const ppx = PAD + BOARD_W + GAP, cx = ppx + PANEL_W / 2;
+  ctx.fillStyle = '#06060f'; ctx.fillRect(ppx, PAD, PANEL_W, BOARD_H);
+  ctx.strokeStyle = '#888'; ctx.lineWidth = 2;
+  ctx.strokeRect(ppx - 2, PAD - 2, PANEL_W + 4, BOARD_H + 4);
+  ctx.fillStyle = '#FFCC00'; ctx.font = 'bold 15px "Courier New",monospace';
+  ctx.fillText('DR. MARIO', cx, PAD + 28);
+  ctx.fillStyle = '#888'; ctx.font = '9px "Courier New",monospace';
+  ctx.fillText('ESC  back to menu', cx, PAD + BOARD_H - 16);
+}
+
+// ─── Input ────────────────────────────────────────────────────────────────────
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') { window.location.href = 'index.html'; return; }
+
+  if (e.key === 'r' || e.key === 'R' || e.key === 'Enter') {
+    initAudio(); init(startLevel); return;
+  }
+  if ((e.key === 'n' || e.key === 'N') && gameWon) {
+    initAudio(); init(level + 1); return;
+  }
+  if (e.key === 'm' || e.key === 'M') {
+    initAudio(); musicEnabled = !musicEnabled; setMusicEnabled(musicEnabled);
+    if (started && !gameOver && !gameWon) render(); else drawStartScreen();
+    return;
+  }
+  if (!started || gameOver || gameWon) {
+    if (e.key === 'ArrowLeft')  { startLevel = Math.max(0,  startLevel - 1); drawStartScreen(); e.preventDefault(); return; }
+    if (e.key === 'ArrowRight') { startLevel = Math.min(19, startLevel + 1); drawStartScreen(); e.preventDefault(); return; }
+    if (e.key >= '0' && e.key <= '9') { startLevel = parseInt(e.key); drawStartScreen(); }
+    return;
+  }
+  switch (e.key) {
+    case 'ArrowLeft':
+      if (pill) { const p = { ...pill, x: pill.x - 1 }; if (pillFits(p)) { pill.x--; sfxMove(); render(); } }
+      e.preventDefault(); break;
+    case 'ArrowRight':
+      if (pill) { const p = { ...pill, x: pill.x + 1 }; if (pillFits(p)) { pill.x++; sfxMove(); render(); } }
+      e.preventDefault(); break;
+    case 'ArrowUp':
+      rotatePill(); render(); e.preventDefault(); break;
+    case 'ArrowDown':
+      softDrop = true; e.preventDefault(); break;
+    case 'p': case 'P':
+      paused = !paused; setPaused(paused);
+      if (!paused) lastDrop = performance.now();
+      render(); break;
+  }
+});
+
+document.addEventListener('keyup', e => { if (e.key === 'ArrowDown') softDrop = false; });
+
+// ─── Touch controls ───────────────────────────────────────────────────────────
+function setupTouch() {
+  const bar = document.getElementById('touch-bar');
+  if (narrowMode || 'ontouchstart' in window) {
+    bar.style.display = 'flex';
+    document.body.style.flexDirection = 'column';
+  }
+  function hold(btn, onDown, onUp) {
+    btn.addEventListener('touchstart', e => { e.preventDefault(); initAudio(); onDown(); }, { passive: false });
+    btn.addEventListener('touchend',   e => { e.preventDefault(); if (onUp) onUp(); }, { passive: false });
+    btn.addEventListener('mousedown',  () => { initAudio(); onDown(); });
+    btn.addEventListener('mouseup',    () => { if (onUp) onUp(); });
+  }
+  hold(document.getElementById('tb-left'),  () => { if (started&&!gameOver&&!gameWon&&!paused&&pill){const p={...pill,x:pill.x-1};if(pillFits(p)){pill.x--;sfxMove();render();}} });
+  hold(document.getElementById('tb-right'), () => { if (started&&!gameOver&&!gameWon&&!paused&&pill){const p={...pill,x:pill.x+1};if(pillFits(p)){pill.x++;sfxMove();render();}} });
+  hold(document.getElementById('tb-rot'),   () => { if (started&&!gameOver&&!gameWon&&!paused) { rotatePill(); render(); } });
+  hold(document.getElementById('tb-drop'),  () => { softDrop = true; }, () => { softDrop = false; });
+  hold(document.getElementById('tb-pause'), () => { if (started&&!gameOver&&!gameWon){paused=!paused;setPaused(paused);if(!paused)lastDrop=performance.now();render();} });
+}
+
+window.addEventListener('resize', () => {
+  computeLayout();
+  if (started && !gameOver && !gameWon) render(); else drawStartScreen();
+  const bar = document.getElementById('touch-bar');
+  if (narrowMode || 'ontouchstart' in window) bar.style.display = 'flex'; else bar.style.display = 'none';
+});
+
+// ─── Boot ─────────────────────────────────────────────────────────────────────
+started = false;
+board = Array.from({ length: ROWS }, () => Array(COLS).fill(null));
+virusCount = 0; score = 0; level = 0; paused = false; gameOver = false; gameWon = false;
+nextColors = [randColor(), randColor()];
+setupTouch();
+const _urlLevel = parseInt(new URLSearchParams(location.search).get('level'));
+if (!isNaN(_urlLevel) && _urlLevel >= 0) {
+  startLevel = Math.min(19, _urlLevel);
+  initAudio(); init(startLevel);
+} else {
+  drawStartScreen();
+}
+</script>
+</body>
+</html>
