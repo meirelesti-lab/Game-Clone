@@ -70,10 +70,10 @@ canvas { display: block; image-rendering: pixelated; image-rendering: crisp-edge
 <div id="wrapper"><canvas id="game"></canvas></div>
 <div id="touch-bar">
   <div id="main-row">
-    <button class="tb act" id="tb-launchL">●</button>
     <button class="tb move" id="tb-left">◄</button>
-    <button class="tb move" id="tb-right">►</button>
+    <button class="tb act" id="tb-launchL">●</button>
     <button class="tb act" id="tb-launchR">●</button>
+    <button class="tb move" id="tb-right">►</button>
   </div>
   <div id="sys-row">
     <button class="tb sys" id="tb-music">♪</button>
@@ -390,7 +390,7 @@ let tbLeft = false, tbRight = false;
   const onAction = e => {
     e.preventDefault(); initAudio();
     if (state === 'start')    { startGame(startLevel); return; }
-    if (state === 'playing')  { if (paused) togglePause(); else launch(); return; }
+    if (state === 'playing')  { if (ball.stuck && !paused) launch(); else togglePause(); return; }
     if (state === 'dead')     { respawn(); return; }
     if (state === 'clear')    { nextLevel(); return; }
     if (state === 'gameover') { startGame(startLevel); return; }
