@@ -26,17 +26,17 @@ canvas { display: block; image-rendering: pixelated; image-rendering: crisp-edge
 #touch-bar {
   display: none;
   width: 100%;
-  height: 88px;
+  height: 104px;
   background: #06060e;
   border-top: 1px solid #222;
-  justify-content: space-between;
+  flex-direction: column;
   align-items: center;
-  padding: 0 12px;
-  gap: 8px;
+  justify-content: center;
+  padding: 6px 10px 4px;
+  gap: 5px;
 }
-#dpad-zone { display: flex; gap: 6px; align-items: center; }
-#sys-zone  { display: flex; flex-direction: column; gap: 4px; align-items: center; flex: 1; }
-#ab-zone   { display: flex; align-items: center; justify-content: center; }
+#main-row { display: flex; gap: 6px; align-items: center; width: 100%; justify-content: space-between; }
+#sys-row  { display: flex; gap: 10px; align-items: center; }
 .tb {
   background: #111128;
   border: 1px solid #333;
@@ -48,12 +48,12 @@ canvas { display: block; image-rendering: pixelated; image-rendering: crisp-edge
   display: flex; align-items: center; justify-content: center;
 }
 .tb:active { background: #222244; color: #fff; }
-.tb.dpad { width: 56px; height: 60px; font-size: 22px; }
-.tb.sys  { width: 52px; height: 22px; font-size: 13px; color: #666; border-color: #222; }
+.tb.dpad { flex: 1; height: 62px; font-size: 22px; }
+.tb.sys  { width: 56px; height: 22px; font-size: 13px; color: #666; border-color: #222; }
 .tb.sys:active { color: #aaa; }
-.tb.ab   { width: 68px; height: 68px; border-radius: 50%; font-size: 22px; font-weight: bold; border-width: 2px; }
-#tb-rot  { color: #F0F000; border-color: #444400; background: #111100; }
-#tb-rot:active { background: #2a2a00; }
+.tb.ab   { width: 62px; height: 62px; border-radius: 50%; font-size: 20px; font-weight: bold; border-width: 2px; flex-shrink: 0; }
+.tb.ab   { color: #F0F000; border-color: #444400; background: #111100; }
+.tb.ab:active { background: #2a2a00; }
 /* CRT scanlines */
 #wrapper::after {
   content: '';
@@ -70,18 +70,17 @@ canvas { display: block; image-rendering: pixelated; image-rendering: crisp-edge
 <body>
 <div id="wrapper"><canvas id="game"></canvas></div>
 <div id="touch-bar">
-  <div id="dpad-zone">
+  <div id="main-row">
+    <button class="tb ab" id="tb-rotL">A</button>
     <button class="tb dpad" id="tb-left">◄</button>
     <button class="tb dpad" id="tb-drop">↓</button>
     <button class="tb dpad" id="tb-right">►</button>
+    <button class="tb ab" id="tb-rotR">A</button>
   </div>
-  <div id="sys-zone">
+  <div id="sys-row">
     <button class="tb sys" id="tb-pause">▶</button>
     <button class="tb sys" id="tb-music">♪</button>
     <button class="tb sys" id="tb-home">⌂</button>
-  </div>
-  <div id="ab-zone">
-    <button class="tb ab" id="tb-rot">A</button>
   </div>
 </div>
 <script>
@@ -97,7 +96,7 @@ function computeLayout() {
   narrowMode = vw < 560;
   if (narrowMode) {
     STATS_H = 52;
-    const avH = vh - 88 - PAD * 2 - STATS_H;
+    const avH = vh - 104 - PAD * 2 - STATS_H;
     BLOCK = Math.max(14, Math.min(Math.floor((vw - PAD * 2) / COLS), Math.floor(avH / ROWS)));
     BOARD_W = COLS * BLOCK; BOARD_H = ROWS * BLOCK;
     CW = vw;
@@ -852,7 +851,9 @@ function setupTouch() {
   }
   hold(document.getElementById('tb-left'),  () => { if (started && !gameOver && !paused && piece && fits(piece.shape, piece.x-1, piece.y)) { piece.x--; sfxMove(); render(); } });
   hold(document.getElementById('tb-right'), () => { if (started && !gameOver && !paused && piece && fits(piece.shape, piece.x+1, piece.y)) { piece.x++; sfxMove(); render(); } });
-  hold(document.getElementById('tb-rot'),   () => { if (started && !gameOver && !paused && piece) { const rot=rotateCW(piece.shape); if(fits(rot,piece.x,piece.y)){piece.shape=rot;sfxRotate();render();} } });
+  const doRotate = () => { if (started && !gameOver && !paused && piece) { const rot=rotateCW(piece.shape); if(fits(rot,piece.x,piece.y)){piece.shape=rot;sfxRotate();render();} } };
+  hold(document.getElementById('tb-rotL'), doRotate);
+  hold(document.getElementById('tb-rotR'), doRotate);
   hold(document.getElementById('tb-drop'),  () => { softDrop = true; },  () => { softDrop = false; });
   hold(document.getElementById('tb-pause'), () => {
     if (!started || gameOver) { init(startLevel); return; }
