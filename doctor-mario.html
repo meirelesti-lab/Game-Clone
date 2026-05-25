@@ -26,17 +26,17 @@ canvas { display: block; image-rendering: pixelated; image-rendering: crisp-edge
 #touch-bar {
   display: none;
   width: 100%;
-  height: 88px;
+  height: 104px;
   background: #05050d;
   border-top: 1px solid #222;
-  justify-content: space-between;
+  flex-direction: column;
   align-items: center;
-  padding: 0 12px;
-  gap: 8px;
+  justify-content: center;
+  padding: 6px 10px 4px;
+  gap: 5px;
 }
-#dpad-zone { display: flex; gap: 6px; align-items: center; }
-#sys-zone  { display: flex; flex-direction: column; gap: 4px; align-items: center; flex: 1; }
-#ab-zone   { display: flex; gap: 10px; align-items: center; }
+#main-row { display: flex; gap: 6px; align-items: center; width: 100%; justify-content: space-between; }
+#sys-row  { display: flex; gap: 10px; align-items: center; }
 .tb {
   background: #101025;
   border: 1px solid #333;
@@ -48,10 +48,10 @@ canvas { display: block; image-rendering: pixelated; image-rendering: crisp-edge
   display: flex; align-items: center; justify-content: center;
 }
 .tb:active { background: #202040; color: #fff; }
-.tb.dpad { width: 56px; height: 60px; font-size: 22px; }
-.tb.sys  { width: 52px; height: 22px; font-size: 13px; color: #666; border-color: #222; }
+.tb.dpad { flex: 1; height: 62px; font-size: 22px; }
+.tb.sys  { width: 56px; height: 22px; font-size: 13px; color: #666; border-color: #222; }
 .tb.sys:active { color: #aaa; }
-.tb.ab   { width: 60px; height: 60px; border-radius: 50%; font-size: 18px; font-weight: bold; border-width: 2px; }
+.tb.ab   { width: 62px; height: 62px; border-radius: 50%; font-size: 18px; font-weight: bold; border-width: 2px; flex-shrink: 0; }
 #tb-rotA { color: #EE3311; border-color: #441100; background: #120505; }
 #tb-rotA:active { background: #2a0a0a; }
 #tb-rotB { color: #2266EE; border-color: #002255; background: #050512; }
@@ -71,19 +71,17 @@ canvas { display: block; image-rendering: pixelated; image-rendering: crisp-edge
 <body>
 <div id="wrapper"><canvas id="game"></canvas></div>
 <div id="touch-bar">
-  <div id="dpad-zone">
+  <div id="main-row">
+    <button class="tb ab" id="tb-rotB">B</button>
     <button class="tb dpad" id="tb-left">◄</button>
     <button class="tb dpad" id="tb-drop">↓</button>
     <button class="tb dpad" id="tb-right">►</button>
+    <button class="tb ab" id="tb-rotA">A</button>
   </div>
-  <div id="sys-zone">
+  <div id="sys-row">
     <button class="tb sys" id="tb-pause">▶</button>
     <button class="tb sys" id="tb-music">♪</button>
     <button class="tb sys" id="tb-home">⌂</button>
-  </div>
-  <div id="ab-zone">
-    <button class="tb ab" id="tb-rotB">B</button>
-    <button class="tb ab" id="tb-rotA">A</button>
   </div>
 </div>
 <script>
@@ -99,7 +97,7 @@ function computeLayout() {
   narrowMode = vw < 560;
   if (narrowMode) {
     STATS_H = 52;
-    const avH = vh - 88 - PAD * 2 - STATS_H;
+    const avH = vh - 104 - PAD * 2 - STATS_H;
     BLOCK = Math.max(14, Math.min(Math.floor((vw - PAD * 2) / COLS), Math.floor(avH / ROWS)));
     BOARD_W = COLS * BLOCK; BOARD_H = ROWS * BLOCK;
     CW = vw;
