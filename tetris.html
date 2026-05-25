@@ -78,7 +78,7 @@ canvas { display: block; image-rendering: pixelated; image-rendering: crisp-edge
 // ─── Layout ──────────────────────────────────────────────────────────────────
 const COLS = 10, ROWS = 20;
 const PAD = 14, GAP = 14, PANEL_W = 148;
-let BLOCK, BOARD_W, BOARD_H, CW, CH, narrowMode = false, xOff = 0;
+let BLOCK, BOARD_W, BOARD_H, CW, CH, narrowMode = false, xOff = 0, dpr = 1;
 
 function computeLayout() {
   const vw = window.innerWidth, vh = window.innerHeight;
@@ -96,7 +96,13 @@ function computeLayout() {
   CH = PAD + BOARD_H + PAD;
   xOff = narrowMode ? Math.floor((CW - PAD * 2 - BOARD_W) / 2) : 0;
   const canvas = document.getElementById('game');
-  if (canvas) { canvas.width = CW; canvas.height = CH; }
+  if (canvas) {
+    dpr = window.devicePixelRatio || 1;
+    canvas.width  = CW * dpr;
+    canvas.height = CH * dpr;
+    canvas.style.width  = CW + 'px';
+    canvas.style.height = CH + 'px';
+  }
 }
 
 // ─── NES gravity table (ms per row, by level) ─────────────────────────────
@@ -523,7 +529,7 @@ function drawMiniBlock(bx, by, nb, color) {
 
 function render() {
   const accent = LEVEL_PALETTE[level % LEVEL_PALETTE.length];
-
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.fillStyle = '#0a0a12'; ctx.fillRect(0, 0, CW, CH);
 
   ctx.save();
@@ -701,6 +707,7 @@ function drawGameOver() {
 }
 
 function drawStartScreen() {
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.fillStyle = '#0a0a12'; ctx.fillRect(0, 0, CW, CH);
 
   ctx.save();

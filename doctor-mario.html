@@ -26,28 +26,36 @@ canvas { display: block; image-rendering: pixelated; image-rendering: crisp-edge
 #touch-bar {
   display: none;
   width: 100%;
-  height: 64px;
+  height: 88px;
   background: #05050d;
   border-top: 1px solid #222;
-  justify-content: space-around;
+  justify-content: space-between;
   align-items: center;
-  padding: 0 8px;
-  gap: 6px;
+  padding: 0 12px;
+  gap: 8px;
 }
+#dpad-zone { display: flex; gap: 6px; align-items: center; }
+#sys-zone  { display: flex; flex-direction: column; gap: 4px; align-items: center; flex: 1; }
+#ab-zone   { display: flex; gap: 10px; align-items: center; }
 .tb {
-  flex: 1;
-  height: 46px;
   background: #101025;
   border: 1px solid #333;
   color: #bbb;
-  font-size: 20px;
-  border-radius: 4px;
+  border-radius: 6px;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
   display: flex; align-items: center; justify-content: center;
 }
 .tb:active { background: #202040; color: #fff; }
+.tb.dpad { width: 56px; height: 60px; font-size: 22px; }
+.tb.sys  { width: 52px; height: 22px; font-size: 13px; color: #666; border-color: #222; }
+.tb.sys:active { color: #aaa; }
+.tb.ab   { width: 60px; height: 60px; border-radius: 50%; font-size: 18px; font-weight: bold; border-width: 2px; }
+#tb-rotA { color: #EE3311; border-color: #441100; background: #120505; }
+#tb-rotA:active { background: #2a0a0a; }
+#tb-rotB { color: #2266EE; border-color: #002255; background: #050512; }
+#tb-rotB:active { background: #0a0a2a; }
 #wrapper::after {
   content: '';
   position: absolute;
@@ -63,13 +71,20 @@ canvas { display: block; image-rendering: pixelated; image-rendering: crisp-edge
 <body>
 <div id="wrapper"><canvas id="game"></canvas></div>
 <div id="touch-bar">
-  <button class="tb" id="tb-left">◄</button>
-  <button class="tb" id="tb-rot">▲</button>
-  <button class="tb" id="tb-drop">▼</button>
-  <button class="tb" id="tb-right">►</button>
-  <button class="tb" id="tb-pause">▶</button>
-  <button class="tb" id="tb-music" style="max-width:44px;font-size:16px;">♪</button>
-  <button class="tb" id="tb-home" style="max-width:44px;font-size:13px;">⌂</button>
+  <div id="dpad-zone">
+    <button class="tb dpad" id="tb-left">◄</button>
+    <button class="tb dpad" id="tb-drop">↓</button>
+    <button class="tb dpad" id="tb-right">►</button>
+  </div>
+  <div id="sys-zone">
+    <button class="tb sys" id="tb-pause">▶</button>
+    <button class="tb sys" id="tb-music">♪</button>
+    <button class="tb sys" id="tb-home">⌂</button>
+  </div>
+  <div id="ab-zone">
+    <button class="tb ab" id="tb-rotB">B</button>
+    <button class="tb ab" id="tb-rotA">A</button>
+  </div>
 </div>
 <script>
 'use strict';
@@ -77,25 +92,33 @@ canvas { display: block; image-rendering: pixelated; image-rendering: crisp-edge
 // ─── Layout ──────────────────────────────────────────────────────────────────
 const COLS = 8, ROWS = 16;
 const PAD = 14, GAP = 14, PANEL_W = 162;
-let BLOCK, BOARD_W, BOARD_H, CW, CH, narrowMode = false, xOff = 0;
+let BLOCK, BOARD_W, BOARD_H, CW, CH, narrowMode = false, xOff = 0, STATS_H = 0, dpr = 1;
 
 function computeLayout() {
   const vw = window.innerWidth, vh = window.innerHeight;
   narrowMode = vw < 560;
   if (narrowMode) {
-    const avH = vh - 64 - PAD * 2;
+    STATS_H = 52;
+    const avH = vh - 88 - PAD * 2 - STATS_H;
     BLOCK = Math.max(14, Math.min(Math.floor((vw - PAD * 2) / COLS), Math.floor(avH / ROWS)));
     BOARD_W = COLS * BLOCK; BOARD_H = ROWS * BLOCK;
     CW = vw;
   } else {
+    STATS_H = 0;
     BLOCK = Math.max(18, Math.min(32, Math.floor((vw - PAD * 2 - GAP - PANEL_W) / COLS)));
     BOARD_W = COLS * BLOCK; BOARD_H = ROWS * BLOCK;
     CW = PAD + BOARD_W + GAP + PANEL_W + PAD;
   }
-  CH = PAD + BOARD_H + PAD;
+  CH = STATS_H + PAD + BOARD_H + PAD;
   xOff = narrowMode ? Math.floor((CW - PAD * 2 - BOARD_W) / 2) : 0;
   const canvas = document.getElementById('game');
-  if (canvas) { canvas.width = CW; canvas.height = CH; }
+  if (canvas) {
+    dpr = window.devicePixelRatio || 1;
+    canvas.width  = CW * dpr;
+    canvas.height = CH * dpr;
+    canvas.style.width  = CW + 'px';
+    canvas.style.height = CH + 'px';
+  }
 }
 
 // ─── Colors ───────────────────────────────────────────────────────────────────
@@ -433,24 +456,28 @@ function processMatches() {
   }
 }
 
-function rotatePill() {
+function rotatePill(silent = false) {
   if (!pill) return;
   if (pill.ori === 'H') {
     // H→V: anchor stays at (x,y); second cell moves from (x+1,y) to (x,y+1)
     const p = { ...pill, ori: 'V' };
-    if (pillFits(p)) { pill = p; sfxRotate(); }
-    // if (x,y+1) blocked, rotation simply fails — no upward drift
+    if (pillFits(p)) { pill = p; if (!silent) sfxRotate(); }
   } else {
     // V→H: swap colors so the cycle is A-left→A-top→B-left→B-top→A-left (4 states)
     const swapped = [pill.colors[1], pill.colors[0]];
     const p = { ...pill, ori: 'H', colors: swapped };
-    if (pillFits(p)) { pill = p; sfxRotate(); return; }
+    if (pillFits(p)) { pill = p; if (!silent) sfxRotate(); return; }
     // wall-kick left ONLY when x+1 is beyond the right wall
     if (pill.x + 1 >= COLS) {
       const p2 = { ...pill, ori: 'H', x: pill.x - 1, colors: swapped };
-      if (pillFits(p2)) { pill = p2; sfxRotate(); }
+      if (pillFits(p2)) { pill = p2; if (!silent) sfxRotate(); }
     }
   }
+}
+
+function rotatePillCCW() {
+  // CCW = 3× CW in a 4-state cycle
+  rotatePill(true); rotatePill(true); rotatePill();
 }
 
 function triggerGameOver() {
@@ -588,10 +615,11 @@ function drawActivePill() {
 }
 
 function render() {
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.fillStyle = '#070712'; ctx.fillRect(0, 0, CW, CH);
 
   ctx.save();
-  ctx.translate(xOff, 0);
+  ctx.translate(xOff, STATS_H);
 
   ctx.fillStyle = '#040410'; ctx.fillRect(PAD, PAD, BOARD_W, BOARD_H);
 
@@ -659,39 +687,33 @@ function render() {
 }
 
 function drawNarrowStats() {
-  const boardLeft = xOff + PAD;
-  const boardRight = boardLeft + BOARD_W;
-  const lx = Math.floor(boardLeft / 2);
-  const rx = Math.floor((boardRight + CW) / 2);
+  ctx.fillStyle = '#06060f';
+  ctx.fillRect(0, 0, CW, STATS_H);
+  ctx.strokeStyle = '#1a1a3a'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(0, STATS_H - 0.5); ctx.lineTo(CW, STATS_H - 0.5); ctx.stroke();
+
+  const colW = CW / 4, y1 = 15, y2 = 38;
   ctx.textAlign = 'center';
 
-  ctx.fillStyle = '#555'; ctx.font = 'bold 7px "Courier New",monospace';
-  ctx.fillText('SCORE', lx, PAD + 20);
-  ctx.fillStyle = '#FFCC00'; ctx.font = 'bold 11px "Courier New",monospace';
-  ctx.fillText(String(score).padStart(7, '0'), lx, PAD + 34);
-
-  ctx.fillStyle = '#555'; ctx.font = 'bold 7px "Courier New",monospace';
-  ctx.fillText('LEVEL', lx, PAD + 62);
-  ctx.fillStyle = '#00F0F0'; ctx.font = 'bold 20px "Courier New",monospace';
-  ctx.fillText(String(level).padStart(2, '0'), lx, PAD + 82);
-
-  ctx.fillStyle = '#555'; ctx.font = 'bold 7px "Courier New",monospace';
-  ctx.fillText('VIRUS', rx, PAD + 20);
-  ctx.fillStyle = '#FF6644'; ctx.font = 'bold 16px "Courier New",monospace';
-  ctx.fillText(String(virusCount).padStart(3, '0'), rx, PAD + 36);
-
-  ctx.fillStyle = '#555'; ctx.font = 'bold 7px "Courier New",monospace';
-  ctx.fillText('NEXT', rx, PAD + 62);
-  if (nextColors) {
-    const nb = Math.min(22, Math.floor((CW - boardRight - 4) / 2));
-    const npx = rx - nb, npy = PAD + 68;
-    drawPillHalf(npx,      npy, nextColors[0], 'R', nb);
-    drawPillHalf(npx + nb, npy, nextColors[1], 'L', nb);
+  function item(label, value, color, cx) {
+    ctx.fillStyle = '#555'; ctx.font = 'bold 8px "Courier New",monospace';
+    ctx.fillText(label, cx, y1);
+    ctx.fillStyle = color; ctx.font = 'bold 14px "Courier New",monospace';
+    ctx.fillText(value, cx, y2);
   }
 
-  ctx.fillStyle = musicEnabled ? '#44DD66' : '#444';
-  ctx.font = '8px "Courier New",monospace';
-  ctx.fillText(musicEnabled ? '♪ ON' : '♪ OFF', lx, PAD + BOARD_H - 10);
+  item('SCORE', String(score).padStart(7, '0'), '#FFCC00', colW * 0.5);
+  item('LEVEL', String(level).padStart(2, '0'),  '#00F0F0', colW * 1.5);
+  item('VIRUS', String(virusCount).padStart(3, '0'), '#FF6644', colW * 2.5);
+
+  const nx = colW * 3.5;
+  ctx.fillStyle = '#555'; ctx.font = 'bold 8px "Courier New",monospace';
+  ctx.fillText('NEXT', nx, y1);
+  if (nextColors) {
+    const nb = 18;
+    drawPillHalf(nx - nb, y2 - nb + 2, nextColors[0], 'R', nb);
+    drawPillHalf(nx,      y2 - nb + 2, nextColors[1], 'L', nb);
+  }
 }
 
 function drawPanel() {
@@ -750,10 +772,11 @@ function drawPanel() {
 }
 
 function drawStartScreen() {
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.fillStyle = '#070712'; ctx.fillRect(0, 0, CW, CH);
 
   ctx.save();
-  ctx.translate(xOff, 0);
+  ctx.translate(xOff, STATS_H);
 
   ctx.strokeStyle = '#888'; ctx.lineWidth = 2;
   ctx.strokeRect(PAD - 2, PAD - 2, BOARD_W + 4, BOARD_H + 4);
@@ -868,7 +891,8 @@ function setupTouch() {
   }
   hold(document.getElementById('tb-left'),  () => { if (started&&!gameOver&&!gameWon&&!paused&&pill){const p={...pill,x:pill.x-1};if(pillFits(p)){pill.x--;sfxMove();render();}} });
   hold(document.getElementById('tb-right'), () => { if (started&&!gameOver&&!gameWon&&!paused&&pill){const p={...pill,x:pill.x+1};if(pillFits(p)){pill.x++;sfxMove();render();}} });
-  hold(document.getElementById('tb-rot'),   () => { if (started&&!gameOver&&!gameWon&&!paused) { rotatePill(); render(); } });
+  hold(document.getElementById('tb-rotA'),  () => { if (started&&!gameOver&&!gameWon&&!paused) { rotatePill(); render(); } });
+  hold(document.getElementById('tb-rotB'),  () => { if (started&&!gameOver&&!gameWon&&!paused) { rotatePillCCW(); render(); } });
   hold(document.getElementById('tb-drop'),  () => { softDrop = true; }, () => { softDrop = false; });
   hold(document.getElementById('tb-pause'), () => {
     if (!started || gameOver || gameWon) { initAudio(); init(gameWon ? level + 1 : startLevel); return; }
