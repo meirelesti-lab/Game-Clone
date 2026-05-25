@@ -78,22 +78,24 @@ canvas { display: block; image-rendering: pixelated; image-rendering: crisp-edge
 // ─── Layout ──────────────────────────────────────────────────────────────────
 const COLS = 10, ROWS = 20;
 const PAD = 14, GAP = 14, PANEL_W = 148;
-let BLOCK, BOARD_W, BOARD_H, CW, CH, narrowMode = false, xOff = 0, dpr = 1;
+let BLOCK, BOARD_W, BOARD_H, CW, CH, narrowMode = false, xOff = 0, dpr = 1, STATS_H = 0;
 
 function computeLayout() {
   const vw = window.innerWidth, vh = window.innerHeight;
   narrowMode = vw < 560;
   if (narrowMode) {
-    const avH = vh - 64 - PAD * 2;
+    STATS_H = 52;
+    const avH = vh - 64 - PAD * 2 - STATS_H;
     BLOCK = Math.max(14, Math.min(Math.floor((vw - PAD * 2) / COLS), Math.floor(avH / ROWS)));
     BOARD_W = COLS * BLOCK; BOARD_H = ROWS * BLOCK;
     CW = vw;
   } else {
+    STATS_H = 0;
     BLOCK = Math.max(18, Math.min(28, Math.floor((vw - PAD * 2 - GAP - PANEL_W) / COLS)));
     BOARD_W = COLS * BLOCK; BOARD_H = ROWS * BLOCK;
     CW = PAD + BOARD_W + GAP + PANEL_W + PAD;
   }
-  CH = PAD + BOARD_H + PAD;
+  CH = STATS_H + PAD + BOARD_H + PAD;
   xOff = narrowMode ? Math.floor((CW - PAD * 2 - BOARD_W) / 2) : 0;
   const canvas = document.getElementById('game');
   if (canvas) {
@@ -533,7 +535,7 @@ function render() {
   ctx.fillStyle = '#0a0a12'; ctx.fillRect(0, 0, CW, CH);
 
   ctx.save();
-  ctx.translate(xOff, 0);
+  ctx.translate(xOff, STATS_H);
 
   ctx.fillStyle = '#07070f'; ctx.fillRect(PAD, PAD, BOARD_W, BOARD_H);
 
@@ -578,31 +580,30 @@ function render() {
 }
 
 function drawNarrowStats(accent) {
-  const boardLeft = xOff + PAD;
-  const boardRight = boardLeft + BOARD_W;
-  const lx = Math.floor(boardLeft / 2);
-  const rx = Math.floor((boardRight + CW) / 2);
+  ctx.fillStyle = '#06060f';
+  ctx.fillRect(0, 0, CW, STATS_H);
+  ctx.strokeStyle = '#1a1a2a'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(0, STATS_H - 0.5); ctx.lineTo(CW, STATS_H - 0.5); ctx.stroke();
+
+  const colW = CW / 4, y1 = 15, y2 = 38;
   ctx.textAlign = 'center';
 
-  ctx.fillStyle = '#555'; ctx.font = 'bold 7px "Courier New",monospace';
-  ctx.fillText('SCORE', lx, PAD + 20);
-  ctx.fillStyle = '#F0F000'; ctx.font = 'bold 11px "Courier New",monospace';
-  ctx.fillText(String(score).padStart(7, '0'), lx, PAD + 34);
+  function item(label, value, color, cx) {
+    ctx.fillStyle = '#555'; ctx.font = 'bold 8px "Courier New",monospace';
+    ctx.fillText(label, cx, y1);
+    ctx.fillStyle = color; ctx.font = 'bold 14px "Courier New",monospace';
+    ctx.fillText(value, cx, y2);
+  }
 
-  ctx.fillStyle = '#555'; ctx.font = 'bold 7px "Courier New",monospace';
-  ctx.fillText('LEVEL', lx, PAD + 62);
-  ctx.fillStyle = '#00F0F0'; ctx.font = 'bold 20px "Courier New",monospace';
-  ctx.fillText(String(level).padStart(2, '0'), lx, PAD + 82);
+  item('SCORE', String(score).padStart(7, '0'), accent,    colW * 0.5);
+  item('LEVEL', String(level).padStart(2, '0'),  '#00F0F0', colW * 1.5);
+  item('LINES', String(lines).padStart(4, '0'),  '#00F000', colW * 2.5);
 
-  ctx.fillStyle = '#555'; ctx.font = 'bold 7px "Courier New",monospace';
-  ctx.fillText('LINES', rx, PAD + 20);
-  ctx.fillStyle = '#00F000'; ctx.font = 'bold 12px "Courier New",monospace';
-  ctx.fillText(String(lines).padStart(4, '0'), rx, PAD + 34);
-
-  ctx.fillStyle = '#555'; ctx.font = 'bold 7px "Courier New",monospace';
-  ctx.fillText('NEXT', rx, PAD + 62);
+  const nx = colW * 3.5;
+  ctx.fillStyle = '#555'; ctx.font = 'bold 8px "Courier New",monospace';
+  ctx.fillText('NEXT', nx, y1);
   if (nextPiece) {
-    const nb = Math.min(12, Math.floor((CW - boardRight - 4) / 4));
+    const nb = Math.min(14, Math.floor((STATS_H - 12) / 2));
     const shape = nextPiece.shape;
     const rows = shape.length, cols = shape[0].length;
     let minR = rows, maxR = -1, minC = cols, maxC = -1;
@@ -610,16 +611,12 @@ function drawNarrowStats(accent) {
       if (r < minR) minR = r; if (r > maxR) maxR = r;
       if (c < minC) minC = c; if (c > maxC) maxC = c;
     }
-    const usedC = maxC - minC + 1;
-    const ox = rx - (usedC * nb) / 2 - minC * nb;
-    const oy = PAD + 68 - minR * nb;
+    const usedC = maxC - minC + 1, usedR = maxR - minR + 1;
+    const ox = nx - (usedC * nb) / 2 - minC * nb;
+    const oy = y1 + 4 - minR * nb;
     for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++)
       if (shape[r][c]) drawMiniBlock(ox + c * nb, oy + r * nb, nb, nextPiece.color);
   }
-
-  ctx.fillStyle = musicEnabled ? '#00F000' : '#444';
-  ctx.font = '8px "Courier New",monospace';
-  ctx.fillText(musicEnabled ? '♪ ON' : '♪ OFF', lx, PAD + BOARD_H - 10);
 }
 
 function labelAndValue(cx, y, label, value, col) {
@@ -693,7 +690,7 @@ function drawPanel(accent) {
 
 function drawGameOver() {
   ctx.save();
-  ctx.translate(xOff, 0);
+  ctx.translate(xOff, STATS_H);
   ctx.fillStyle = 'rgba(0,0,0,0.78)'; ctx.fillRect(PAD, PAD, BOARD_W, BOARD_H);
   ctx.textAlign = 'center';
   const mx = PAD + BOARD_W / 2;
@@ -711,7 +708,7 @@ function drawStartScreen() {
   ctx.fillStyle = '#0a0a12'; ctx.fillRect(0, 0, CW, CH);
 
   ctx.save();
-  ctx.translate(xOff, 0);
+  ctx.translate(xOff, STATS_H);
 
   ctx.strokeStyle = '#888'; ctx.lineWidth = 2;
   ctx.strokeRect(PAD-2, PAD-2, BOARD_W+4, BOARD_H+4);
