@@ -60,7 +60,7 @@ canvas { display: block; image-rendering: pixelated; image-rendering: crisp-edge
 <div id="wrapper"><canvas id="game"></canvas></div>
 <div id="touch-bar">
   <button class="tb" id="tb-left">◄</button>
-  <button class="tb" id="tb-launch">▶</button>
+  <button class="tb" id="tb-launch">●</button>
   <button class="tb" id="tb-right">►</button>
   <button class="tb" id="tb-music">♪</button>
   <button class="tb" id="tb-home" style="max-width:48px;font-size:15px;">⌂</button>
@@ -158,6 +158,9 @@ const LOOP_DUR = MELODY.reduce((s,[,d])=>s+d,0) * Q;
 function initAudio() {
   if (audioCtx) { audioCtx.resume(); return; }
   audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  // iOS silent-buffer unlock
+  const _ub = audioCtx.createBuffer(1,1,22050), _us = audioCtx.createBufferSource();
+  _us.buffer = _ub; _us.connect(audioCtx.destination); _us.start(0);
   audioCtx.resume();
   masterGain = audioCtx.createGain(); masterGain.gain.value = 1;
   musicGain  = audioCtx.createGain(); musicGain.gain.value  = musicEnabled ? 1 : 0;
@@ -186,19 +189,22 @@ function scheduleLoop(loopStart) {
 
 function startMusic() {
   if (!audioCtx || musicRunning) return;
-  musicRunning = true;
-  melodyLoopStart = audioCtx.currentTime + 0.05;
-  scheduleLoop(melodyLoopStart);
-  function tick() {
-    if (!musicRunning) return;
-    const ahead = melodyLoopStart - audioCtx.currentTime;
-    if (ahead < LOOP_DUR * 0.5) {
-      melodyLoopStart += LOOP_DUR;
-      scheduleLoop(melodyLoopStart);
+  audioCtx.resume().then(() => {
+    if (musicRunning) return;
+    musicRunning = true;
+    melodyLoopStart = audioCtx.currentTime + 0.1;
+    scheduleLoop(melodyLoopStart);
+    function tick() {
+      if (!musicRunning) return;
+      const ahead = melodyLoopStart - audioCtx.currentTime;
+      if (ahead < LOOP_DUR * 0.5) {
+        melodyLoopStart += LOOP_DUR;
+        scheduleLoop(melodyLoopStart);
+      }
+      melodyTimer = setTimeout(tick, 500);
     }
     melodyTimer = setTimeout(tick, 500);
-  }
-  melodyTimer = setTimeout(tick, 500);
+  });
 }
 
 function stopMusic() {
@@ -240,6 +246,7 @@ const URL_LEVEL  = parseInt(urlParams.get('level') || '-1');
 let startLevel   = Math.max(0, Math.min(9, URL_LEVEL >= 0 ? URL_LEVEL : 0));
 
 let state; // 'start' | 'playing' | 'dead' | 'gameover' | 'clear'
+let paused = false;
 let score, lives, level;
 let paddle, ball, bricks, bricksLeft;
 
@@ -264,14 +271,34 @@ function makeBricks() {
     }
 }
 
+function togglePause() {
+  if (state !== 'playing') return;
+  paused = !paused;
+  if (paused) stopMusic(); else startMusic();
+  updateActionBtn();
+}
+
+function updateActionBtn() {
+  const btn = document.getElementById('tb-launch');
+  if (!btn) return;
+  if (state === 'playing') {
+    if (paused)       btn.textContent = '▶';
+    else if (ball && ball.stuck) btn.textContent = '●';
+    else              btn.textContent = '⏸';
+  } else {
+    btn.textContent = '▶';
+  }
+}
+
 function startGame(lvl) {
-  level = lvl; score = 0; lives = 3;
+  level = lvl; score = 0; lives = 3; paused = false;
   makePaddle(); makeBricks(); makeBall();
   state = 'playing';
   startMusic();
+  updateActionBtn();
 }
-function nextLevel()  { level++; makePaddle(); makeBricks(); makeBall(); state = 'playing'; startMusic(); }
-function respawn()    { makePaddle(); makeBall(); state = 'playing'; startMusic(); }
+function nextLevel()  { level++; paused = false; makePaddle(); makeBricks(); makeBall(); state = 'playing'; startMusic(); updateActionBtn(); }
+function respawn()    { paused = false; makePaddle(); makeBall(); state = 'playing'; startMusic(); updateActionBtn(); }
 
 // ─── Input ────────────────────────────────────────────────────────────────────
 const held = {};
@@ -289,8 +316,9 @@ document.addEventListener('keydown', e => {
       if (e.key === 'Escape')                 { window.location.href = 'index.html'; return; }
       break;
     case 'playing':
-      if (e.key === ' ')      { initAudio(); launch(); return; }
-      if (e.key === 'Escape') { stopMusic(); window.location.href = 'index.html'; return; }
+      if (e.key === ' ')                        { initAudio(); if (paused) togglePause(); else launch(); return; }
+      if (e.key === 'p' || e.key === 'P')       { togglePause(); return; }
+      if (e.key === 'Escape')                   { stopMusic(); window.location.href = 'index.html'; return; }
       break;
     case 'dead':
       if (e.key === ' ' || e.key === 'Enter') { initAudio(); respawn(); return; }
@@ -346,7 +374,7 @@ let tbLeft = false, tbRight = false;
   actBtn.addEventListener('touchstart', e => {
     e.preventDefault(); initAudio();
     if (state === 'start')    { startGame(startLevel); return; }
-    if (state === 'playing')  { launch(); return; }
+    if (state === 'playing')  { if (paused) togglePause(); else launch(); return; }
     if (state === 'dead')     { respawn(); return; }
     if (state === 'clear')    { nextLevel(); return; }
     if (state === 'gameover') { startGame(startLevel); return; }
@@ -392,7 +420,7 @@ function maybeSpeedUp() {
 const PAD_SPD = 5.5;
 
 function update(dt) {
-  if (state !== 'playing') return;
+  if (state !== 'playing' || paused) return;
 
   const spd = PAD_SPD * dt;
   if (held['ArrowLeft']  || tbLeft)  paddle.x -= spd;
@@ -517,8 +545,8 @@ function drawPlaying() {
   ctx.fillStyle = '#fff';
   ctx.fill();
 
-  if (ball.stuck && state === 'playing' && Math.floor(Date.now() / 600) % 2 === 0) {
-    txt(isCoarse ? 'TAP ▶ TO LAUNCH' : 'SPACE  TO  LAUNCH', CW / 2, CH - 16, 11, '#444');
+  if (!paused && ball.stuck && state === 'playing' && Math.floor(Date.now() / 600) % 2 === 0) {
+    txt(isCoarse ? 'TAP ● TO LAUNCH' : 'SPACE  TO  LAUNCH', CW / 2, CH - 16, 11, '#444');
   }
 }
 
@@ -551,8 +579,16 @@ function drawStartScreen() {
 }
 
 function draw() {
+  updateActionBtn();
   if (state === 'start') { drawStartScreen(); return; }
   drawPlaying();
+  if (state === 'playing' && paused) {
+    ctx.fillStyle = 'rgba(0,0,0,0.65)';
+    ctx.fillRect(0, 0, CW, CH);
+    shadow('PAUSED', CW/2, CH/2, Math.min(32, CW*0.09), '#fff', '#333');
+    txt(isCoarse ? 'TAP ⏸ TO RESUME' : 'P  TO  RESUME', CW/2, CH/2 + 34, 11, '#666');
+    return;
+  }
   if (state === 'dead') {
     drawOverlay('BALL LOST', '#FF4444', '#660000', [
       { t: `${lives} BALL${lives !== 1 ? 'S' : ''}  REMAINING`, sz: 13, c: '#888' },

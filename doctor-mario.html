@@ -81,7 +81,7 @@ function computeLayout() {
     BLOCK = Math.max(18, Math.min(32, Math.floor((vw - PAD * 2 - GAP - PANEL_W) / COLS)));
   }
   BOARD_W = COLS * BLOCK; BOARD_H = ROWS * BLOCK;
-  CW = narrowMode ? vw : PAD + BOARD_W + GAP + PANEL_W + PAD;
+  CW = narrowMode ? PAD * 2 + BOARD_W : PAD + BOARD_W + GAP + PANEL_W + PAD;
   CH = PAD + BOARD_H + PAD + (narrowMode ? STRIP_H : 0);
   const canvas = document.getElementById('game');
   if (canvas) { canvas.width = CW; canvas.height = CH; }
@@ -138,6 +138,9 @@ const MELODY_DUR = MELODY.reduce((s, [,d]) => s + d, 0) * Q;
 function initAudio() {
   if (audioCtx) { audioCtx.resume(); return; }
   audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  // iOS silent-buffer unlock
+  const _ub = audioCtx.createBuffer(1,1,22050), _us = audioCtx.createBufferSource();
+  _us.buffer = _ub; _us.connect(audioCtx.destination); _us.start(0);
   audioCtx.resume();
   masterGain = audioCtx.createGain(); masterGain.gain.value = 1.0; masterGain.connect(audioCtx.destination);
   musicGain  = audioCtx.createGain(); musicGain.gain.value  = 0.18; musicGain.connect(masterGain);
@@ -181,8 +184,11 @@ function runSched() {
 
 function startMusic() {
   if (!audioCtx || musicRunning) return;
-  musicRunning = true; melodyLoopStart = audioCtx.currentTime + 0.05;
-  runSched();
+  audioCtx.resume().then(() => {
+    if (musicRunning) return;
+    musicRunning = true; melodyLoopStart = audioCtx.currentTime + 0.1;
+    runSched();
+  });
 }
 
 function stopMusic() {
